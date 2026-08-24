@@ -1,6 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
 import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
-import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-analytics.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyCsCfJXk0dg9Q4TYtDF0qW6dyb2vPjMoSM",
@@ -14,22 +13,22 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const analytics = getAnalytics(app);
 
 const loginForm = document.getElementById('login-form');
+const usernameInput = document.getElementById('username-input');
+
 if (loginForm) {
     loginForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const username = document.getElementById('username-input').value.trim();
-        
+        const username = usernameInput.value.trim();
+
         if (username) {
             try {
-                await signInAnonymously(auth);
                 localStorage.setItem('optic_username', username);
+                await signInAnonymously(auth);
                 window.location.href = 'chat.html';
             } catch (error) {
-                console.error("Login error:", error.message);
-                alert("Authentication failed. Please try again.");
+                console.error("Authentication error:", error);
             }
         }
     });
