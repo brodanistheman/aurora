@@ -26,7 +26,7 @@ if (loginForm) {
             try {
                 localStorage.setItem('optic_username', username);
                 await signInAnonymously(auth);
-                window.location.href = 'chat.html';
+                window.location.href = 'chat/';
             } catch (error) {
                 console.error("Authentication error:", error);
             }
