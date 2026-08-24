@@ -21,13 +21,13 @@ const messageForm = document.getElementById('message-form');
 const messageInput = document.getElementById('message-input');
 const messagesContainer = document.getElementById('messages-container');
 
-let currentUserEmail = null;
+let currentUsername = null;
 
 onAuthStateChanged(auth, (user) => {
     if (!user) {
         window.location.href = '../';
     } else {
-        currentUserEmail = user.email;
+        currentUsername = user.email.split('@')[0];
     }
 });
 
@@ -48,10 +48,10 @@ if (messageForm) {
         e.preventDefault();
         const text = messageInput.value.trim();
 
-        if (text && currentUserEmail) {
+        if (text && currentUsername) {
             try {
                 await addDoc(collection(db, "messages"), {
-                    username: currentUserEmail.split('@')[0],
+                    username: currentUsername,
                     text: text,
                     timestamp: Date.now()
                 });
