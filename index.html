@@ -4,18 +4,32 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>optic</title>
-    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="login-container">
-        <h2>optic</h2>
-        <form id="login-form">
-            <input type="text" id="identity-input" placeholder="Username or Email..." autocomplete="off" required>
-            <input type="password" id="password-input" placeholder="Password..." autocomplete="off" required>
-            <button type="submit" id="login-btn">Login / Sign Up</button>
-        </form>
-    </div>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
 
-    <script type="module" src="script.js"></script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyCsCfJXk0dg9Q4TYtDF0qW6dyb2vPjMoSM",
+            authDomain: "optic-11418.firebaseapp.com",
+            projectId: "optic-11418",
+            storageBucket: "optic-11418.firebasestorage.app",
+            messagingSenderId: "1026781816164",
+            appId: "1:1026781816164:web:16f12b12269ea384888671",
+            measurementId: "G-SVHF42ZBQS"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                window.location.href = 'chat/';
+            } else {
+                window.location.href = 'login/';
+            }
+        });
+    </script>
 </body>
 </html>
