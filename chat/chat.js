@@ -25,7 +25,7 @@ let currentUsername = null;
 
 onAuthStateChanged(auth, (user) => {
     if (!user) {
-        window.location.href = '../';
+        window.location.href = '../login/';
     } else {
         currentUsername = user.email.split('@')[0];
     }
@@ -36,7 +36,7 @@ if (logoutButton) {
         try {
             await signOut(auth);
             localStorage.removeItem('optic_user');
-            window.location.href = '../';
+            window.location.href = '../login/';
         } catch (error) {
             console.error("Logout error:", error);
         }
