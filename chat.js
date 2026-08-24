@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
-import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
-import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
+import { getFirestore, collection, addDoc, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyCsCfJXk0dg9Q4TYtDF0qW6dyb2vPjMoSM",
@@ -16,41 +16,34 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-const username = localStorage.getItem('optic_username');
-if (!username) {
-    window.location.href = 'index.html';
-}
-
-onAuthStateChanged(auth, (user) => {
-    if (!user) {
-        window.location.href = 'index.html';
-    }
-});
-
-const logoutBtn = document.getElementById('logout-btn');
-if (logoutBtn) {
-    logoutBtn.addEventListener('click', async () => {
-        await signOut(auth);
-        localStorage.removeItem('optic_username');
-        window.location.href = 'index.html';
-    });
-}
-
-const chatForm = document.getElementById('chat-form');
+const logoutButton = document.getElementById('logout-btn');
+const messageForm = document.getElementById('message-form');
 const messageInput = document.getElementById('message-input');
 const messagesContainer = document.getElementById('messages-container');
 
-if (chatForm) {
-    chatForm.addEventListener('submit', async (e) => {
+const username = localStorage.getItem('optic_username');
+if (!username) {
+    window.location.href = '../';
+}
+
+if (logoutButton) {
+    logoutButton.addEventListener('click', () => {
+        localStorage.removeItem('optic_username');
+        window.location.href = '../';
+    });
+}
+
+if (messageForm) {
+    messageForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const text = messageInput.value.trim();
-        
-        if (text) {
+
+        if (text && username) {
             try {
-                await addDoc(collection(db, 'messages'), {
-                    text: text,
+                await addDoc(collection(db, "messages"), {
                     username: username,
-                    timestamp: serverTimestamp()
+                    text: text,
+                    timestamp: Date.now()
                 });
                 messageInput.value = '';
             } catch (error) {
@@ -60,20 +53,15 @@ if (chatForm) {
     });
 }
 
-const q = query(collection(db, 'messages'), orderBy('timestamp', 'asc'));
-onSnapshot(q, (snapshot) => {
-    messagesContainer.innerHTML = '';
-    snapshot.forEach((doc) => {
-        const msg = doc.data();
-        const messageElement = document.createElement('div');
-        messageElement.classList.add('message');
-        
-        if (msg.username === username) {
-            messageElement.classList.add('self');
-        }
-        
-        messageElement.innerHTML = `<span class="msg-user">${msg.username}:</span> <span class="msg-text">${msg.text}</span>`;
-        messagesContainer.appendChild(messageElement);
+if (messagesContainer) {
+    const q = query(collection(db, "messages"), orderBy("timestamp", "asc"));
+    onSnapshot(q, (snapshot) => {
+        messagesContainer.innerHTML = '';
+        snapshot.forEach((doc) => {
+            const data = doc.data();
+            const messageElement = document.createElement('div');
+            messageElement.textContent = `${data.username}: ${data.text}`;
+            messagesContainer.appendChild(messageElement);
+        });
     });
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-});
+}
