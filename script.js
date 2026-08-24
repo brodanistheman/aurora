@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
-import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyCsCfJXk0dg9Q4TYtDF0qW6dyb2vPjMoSM",
@@ -15,20 +15,27 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 
 const loginForm = document.getElementById('login-form');
-const usernameInput = document.getElementById('username-input');
+const emailInput = document.getElementById('email-input');
+const passwordInput = document.getElementById('password-input');
 
 if (loginForm) {
     loginForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const username = usernameInput.value.trim();
+        const email = emailInput.value.trim();
+        const password = passwordInput.value.trim();
 
-        if (username) {
+        if (email && password) {
             try {
-                localStorage.setItem('optic_username', username);
-                await signInAnonymously(auth);
+                let userCredential;
+                try {
+                    userCredential = await signInWithEmailAndPassword(auth, email, password);
+                } catch (signInError) {
+                    userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                }
+                localStorage.setItem('optic_user', userCredential.user.email);
                 window.location.href = 'chat/';
             } catch (error) {
-                console.error("Authentication error:", error);
+                alert("Authentication failed: " + error.message);
             }
         }
     });
