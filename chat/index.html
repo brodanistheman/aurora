@@ -3,24 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Optic Chat</title>
-    <link rel="stylesheet" href="../style.css">
+    <title>Optic Login</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="chat-container">
-        <header class="chat-header">
-            <h2>optic</h2>
-            <button id="logout-btn" class="logout-btn">Logout</button>
-        </header>
-
-        <div id="messages-container" class="messages-container"></div>
-
-        <form id="message-form" class="message-form">
-            <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off" required>
-            <button type="submit" id="send-btn">Send</button>
+    <div class="login-container">
+        <h2>optic</h2>
+        <form id="login-form">
+            <input type="text" id="username-input" placeholder="Enter your username..." autocomplete="off" required>
+            <button type="submit" id="login-btn">Join Chat</button>
         </form>
     </div>
 
-    <script type="module" src="chat.js"></script>
+    <script type="module" src="script.js"></script>
 </body>
 </html>
