@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
-import { getAuth } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
+import { getAuth, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
 import { getFirestore, collection, addDoc, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -21,15 +21,25 @@ const messageForm = document.getElementById('message-form');
 const messageInput = document.getElementById('message-input');
 const messagesContainer = document.getElementById('messages-container');
 
-const username = localStorage.getItem('optic_username');
-if (!username) {
-    window.location.href = '../';
-}
+let currentUserEmail = null;
+
+onAuthStateChanged(auth, (user) => {
+    if (!user) {
+        window.location.href = '../';
+    } else {
+        currentUserEmail = user.email;
+    }
+});
 
 if (logoutButton) {
-    logoutButton.addEventListener('click', () => {
-        localStorage.removeItem('optic_username');
-        window.location.href = '../';
+    logoutButton.addEventListener('click', async () => {
+        try {
+            await signOut(auth);
+            localStorage.removeItem('optic_user');
+            window.location.href = '../';
+        } catch (error) {
+            console.error("Logout error:", error);
+        }
     });
 }
 
@@ -38,10 +48,10 @@ if (messageForm) {
         e.preventDefault();
         const text = messageInput.value.trim();
 
-        if (text && username) {
+        if (text && currentUserEmail) {
             try {
                 await addDoc(collection(db, "messages"), {
-                    username: username,
+                    username: currentUserEmail.split('@')[0],
                     text: text,
                     timestamp: Date.now()
                 });
