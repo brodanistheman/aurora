@@ -15,24 +15,28 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 
 const loginForm = document.getElementById('login-form');
-const emailInput = document.getElementById('email-input');
+const identityInput = document.getElementById('identity-input');
 const passwordInput = document.getElementById('password-input');
 
 if (loginForm) {
     loginForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const email = emailInput.value.trim();
+        let identity = identityInput.value.trim();
         const password = passwordInput.value.trim();
 
-        if (email && password) {
+        if (identity && password) {
+            if (!identity.includes('@')) {
+                identity = `${identity.toLowerCase()}@optic.local`;
+            }
+
             try {
                 let userCredential;
                 try {
-                    userCredential = await signInWithEmailAndPassword(auth, email, password);
+                    userCredential = await signInWithEmailAndPassword(auth, identity, password);
                 } catch (signInError) {
-                    userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                    userCredential = await createUserWithEmailAndPassword(auth, identity, password);
                 }
-                localStorage.setItem('optic_user', userCredential.user.email);
+                localStorage.setItem('optic_user', identity);
                 window.location.href = 'chat/';
             } catch (error) {
                 alert("Authentication failed: " + error.message);
