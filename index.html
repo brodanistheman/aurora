@@ -24,12 +24,35 @@
         const auth = getAuth(app);
 
         onAuthStateChanged(auth, (user) => {
-            if (user) {
-                window.location.href = 'general/';
-            } else {
+            if (!user) {
                 window.location.href = 'onboarding/';
+                return;
             }
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const customPath = urlParams.get('p');
+
+            if (customPath) {
+                const match = customPath.match(/^\/users\/([^\/]+)\/profile$/);
+                if (match) {
+                    const userId = match[1];
+                    loadProfileView(userId);
+                    return;
+                }
+            }
+
+            window.location.href = 'general/';
         });
+
+        function loadProfileView(userId) {
+            document.body.innerHTML = `
+                <div style="background:#121212; color:#fff; padding:40px; font-family:sans-serif;">
+                    <h2>User Profile: ${userId}</h2>
+                    <p>Loading profile data from Firestore...</p>
+                    <a href="general/" style="color:#fff;">Back to General Chat</a>
+                </div>
+            `;
+        }
     </script>
 </body>
 </html>
