@@ -37,7 +37,7 @@ if (loginForm) {
                     userCredential = await createUserWithEmailAndPassword(auth, identity, password);
                 }
                 localStorage.setItem('aurora_user', identity);
-                window.location.href = 'chat/';
+                window.location.href = '../general/';
             } catch (error) {
                 alert("Authentication failed: " + error.message);
             }
