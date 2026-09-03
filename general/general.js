@@ -25,7 +25,7 @@ let currentUsername = null;
 
 onAuthStateChanged(auth, (user) => {
     if (!user) {
-        window.location.href = '../login/';
+        window.location.href = '../onboarding/';
     } else {
         currentUsername = user.email.split('@')[0];
     }
@@ -36,7 +36,7 @@ if (logoutButton) {
         try {
             await signOut(auth);
             localStorage.removeItem('aurora_user');
-            window.location.href = '../login/';
+            window.location.href = '../onboarding/';
         } catch (error) {
             console.error("Logout error:", error);
         }
