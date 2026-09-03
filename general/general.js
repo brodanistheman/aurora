@@ -3,13 +3,13 @@ import { getAuth, signOut, onAuthStateChanged } from "https://www.gstatic.com/fi
 import { getFirestore, collection, addDoc, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 
 const firebaseConfig = {
-    apiKey: "AIzaSyCsCfJXk0dg9Q4TYtDF0qW6dyb2vPjMoSM",
-    authDomain: "optic-11418.firebaseapp.com",
-    projectId: "optic-11418",
-    storageBucket: "optic-11418.firebasestorage.app",
-    messagingSenderId: "1026781816164",
-    appId: "1:1026781816164:web:16f12b12269ea384888671",
-    measurementId: "G-SVHF42ZBQS"
+    apiKey: "AIzaSyCLKCCpNbCs2AJm7g0JtGIjL43X5hr31N8",
+    authDomain: "aurora-9e0fe.firebaseapp.com",
+    projectId: "aurora-9e0fe",
+    storageBucket: "aurora-9e0fe.firebasestorage.app",
+    messagingSenderId: "1023486645506",
+    appId: "1:1023486645506:web:c64a98ebf0c3c817e01e1b",
+    measurementId: "G-3XVQTC189X"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -35,7 +35,7 @@ if (logoutButton) {
     logoutButton.addEventListener('click', async () => {
         try {
             await signOut(auth);
-            localStorage.removeItem('optic_user');
+            localStorage.removeItem('aurora_user');
             window.location.href = '../login/';
         } catch (error) {
             console.error("Logout error:", error);
