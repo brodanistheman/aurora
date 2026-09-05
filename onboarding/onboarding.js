@@ -17,6 +17,27 @@ const auth = getAuth(app);
 const loginForm = document.getElementById('login-form');
 const identityInput = document.getElementById('identity-input');
 const passwordInput = document.getElementById('password-input');
+const tabLogin = document.getElementById('tab-login');
+const tabSignup = document.getElementById('tab-signup');
+const submitBtn = document.getElementById('submit-btn');
+
+let isSignUpMode = false;
+
+if (tabLogin && tabSignup && submitBtn) {
+    tabLogin.addEventListener('click', () => {
+        isSignUpMode = false;
+        tabLogin.classList.add('active');
+        tabSignup.classList.remove('active');
+        submitBtn.textContent = 'Log In';
+    });
+
+    tabSignup.addEventListener('click', () => {
+        isSignUpMode = true;
+        tabSignup.classList.add('active');
+        tabLogin.classList.remove('active');
+        submitBtn.textContent = 'Sign Up';
+    });
+}
 
 if (loginForm) {
     loginForm.addEventListener('submit', async (e) => {
@@ -30,11 +51,10 @@ if (loginForm) {
             }
 
             try {
-                let userCredential;
-                try {
-                    userCredential = await signInWithEmailAndPassword(auth, identity, password);
-                } catch (signInError) {
-                    userCredential = await createUserWithEmailAndPassword(auth, identity, password);
+                if (isSignUpMode) {
+                    await createUserWithEmailAndPassword(auth, identity, password);
+                } else {
+                    await signInWithEmailAndPassword(auth, identity, password);
                 }
                 localStorage.setItem('aurora_user', identity);
                 window.location.href = '../general/';
