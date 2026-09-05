@@ -1,5 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, increment } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyCLKCCpNbCs2AJm7g0JtGIjL43X5hr31N8",
@@ -13,6 +14,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+const db = getFirestore(app);
 
 const loginForm = document.getElementById('login-form');
 const identityInput = document.getElementById('identity-input');
@@ -42,22 +44,46 @@ if (tabLogin && tabSignup && submitBtn) {
 if (loginForm) {
     loginForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        let identity = identityInput.value.trim();
+        const identity = identityInput.value.trim();
         const password = passwordInput.value.trim();
 
         if (identity && password) {
-            if (!identity.includes('@')) {
-                identity = `${identity.toLowerCase()}@aurora.local`;
-            }
-
             try {
                 if (isSignUpMode) {
-                    await createUserWithEmailAndPassword(auth, identity, password);
+                    const userCredential = await createUserWithEmailAndPassword(auth, identity, password);
+                    const user = userCredential.user;
+                    const uid = user.uid;
+
+                    const counterRef = doc(db, "metadata", "userCounter");
+                    const counterSnap = await getDoc(counterRef);
+
+                    let userNumber = 1;
+
+                    if (counterSnap.exists()) {
+                        userNumber = counterSnap.data().totalUsers + 1;
+                        await updateDoc(counterRef, {
+                            totalUsers: increment(1)
+                        });
+                    } else {
+                        await setDoc(counterRef, {
+                            totalUsers: 1
+                        });
+                    }
+
+                    await setDoc(doc(db, "users", uid), {
+                        uid: uid,
+                        email: identity,
+                        userNumber: userNumber,
+                        createdAt: new Date().toISOString()
+                    });
+
+                    localStorage.setItem('aurora_user', identity);
+                    window.location.href = '../general/';
                 } else {
                     await signInWithEmailAndPassword(auth, identity, password);
+                    localStorage.setItem('aurora_user', identity);
+                    window.location.href = '../general/';
                 }
-                localStorage.setItem('aurora_user', identity);
-                window.location.href = '../general/';
             } catch (error) {
                 alert("Authentication failed: " + error.message);
             }
