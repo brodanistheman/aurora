@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
-import { getAuth, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
-import { getFirestore, collection, addDoc, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
+import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyCLKCCpNbCs2AJm7g0JtGIjL43X5hr31N8",
@@ -16,62 +16,36 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-const logoutButton = document.getElementById('logout-btn');
-const messageForm = document.getElementById('message-form');
-const messageInput = document.getElementById('message-input');
-const messagesContainer = document.getElementById('messages-container');
+const userInfoElement = document.getElementById('user-info');
+const logoutButton = document.getElementById('logout-button');
 
-let currentUsername = null;
+onAuthStateChanged(auth, async (user) => {
+    if (user) {
+        try {
+            const userRef = doc(db, "users", user.uid);
+            const userSnapshot = await getDoc(userRef);
 
-onAuthStateChanged(auth, (user) => {
-    if (!user) {
-        window.location.href = '../onboarding/';
+            if (userSnapshot.exists()) {
+                const userData = userSnapshot.data();
+                userInfoElement.innerHTML = `
+                    <p>Email: ${userData.email}</p>
+                    <p>Registration ID: #${userData.registrationOrder}</p>
+                `;
+            } else {
+                userInfoElement.textContent = "User profile not found.";
+            }
+        } catch (error) {
+            userInfoElement.textContent = "Failed to load user data.";
+        }
     } else {
-        currentUsername = user.email.split('@')[0];
+        window.location.href = '../';
     }
 });
 
 if (logoutButton) {
     logoutButton.addEventListener('click', async () => {
-        try {
-            await signOut(auth);
-            localStorage.removeItem('aurora_user');
-            window.location.href = '../onboarding/';
-        } catch (error) {
-            console.error("Logout error:", error);
-        }
-    });
-}
-
-if (messageForm) {
-    messageForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const text = messageInput.value.trim();
-
-        if (text && currentUsername) {
-            try {
-                await addDoc(collection(db, "messages"), {
-                    username: currentUsername,
-                    text: text,
-                    timestamp: Date.now()
-                });
-                messageInput.value = '';
-            } catch (error) {
-                console.error("Error sending message:", error);
-            }
-        }
-    });
-}
-
-if (messagesContainer) {
-    const q = query(collection(db, "messages"), orderBy("timestamp", "asc"));
-    onSnapshot(q, (snapshot) => {
-        messagesContainer.innerHTML = '';
-        snapshot.forEach((doc) => {
-            const data = doc.data();
-            const messageElement = document.createElement('div');
-            messageElement.textContent = `${data.username}: ${data.text}`;
-            messagesContainer.appendChild(messageElement);
-        });
+        await signOut(auth);
+        localStorage.removeItem('aurora_user');
+        window.location.href = '../';
     });
 }

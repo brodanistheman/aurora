@@ -22,7 +22,6 @@ const passwordInput = document.getElementById('password-input');
 const loginTab = document.getElementById('login-tab');
 const signupTab = document.getElementById('signup-tab');
 const submitButton = document.getElementById('submit-button');
-const statusMessage = document.getElementById('status-message');
 
 let isSignUpMode = false;
 
@@ -39,7 +38,6 @@ if (loginTab && signupTab && submitButton) {
         loginTab.classList.add('active');
         signupTab.classList.remove('active');
         submitButton.textContent = 'Log In';
-        if (statusMessage) statusMessage.textContent = '';
     });
 
     signupTab.addEventListener('click', () => {
@@ -47,7 +45,6 @@ if (loginTab && signupTab && submitButton) {
         signupTab.classList.add('active');
         loginTab.classList.remove('active');
         submitButton.textContent = 'Sign Up';
-        if (statusMessage) statusMessage.textContent = '';
     });
 }
 
@@ -90,26 +87,15 @@ if (authForm) {
                         });
                     });
 
-                    if (statusMessage) {
-                        statusMessage.textContent = `Success! Your Registration ID is #${registrationOrder}`;
-                    }
-
                     localStorage.setItem('aurora_user', email);
-                    setTimeout(() => {
-                        window.location.href = '../general/';
-                    }, 2000);
-
+                    window.location.href = '../general/';
                 } else {
                     await signInWithEmailAndPassword(auth, email, password);
                     localStorage.setItem('aurora_user', email);
                     window.location.href = '../general/';
                 }
             } catch (error) {
-                if (statusMessage) {
-                    statusMessage.textContent = "Authentication failed: " + error.message;
-                } else {
-                    alert("Authentication failed: " + error.message);
-                }
+                alert("Authentication failed: " + error.message);
             }
         }
     });
