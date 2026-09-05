@@ -77,6 +77,8 @@ if (authForm) {
                         return nextOrder;
                     });
 
+                    console.log("Aurora Registration ID:", registrationOrder);
+
                     await runTransaction(db, async (transaction) => {
                         const userRef = doc(db, "users", userId);
                         transaction.set(userRef, {
