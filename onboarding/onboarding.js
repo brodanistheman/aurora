@@ -22,11 +22,12 @@ const passwordInput = document.getElementById('password-input');
 const loginTab = document.getElementById('login-tab');
 const signupTab = document.getElementById('signup-tab');
 const submitButton = document.getElementById('submit-button');
+const statusMessage = document.getElementById('status-message');
 
 let isSignUpMode = false;
 
 onAuthStateChanged(auth, (user) => {
-    if (user) {
+    if (user && !isSignUpMode) {
         localStorage.setItem('aurora_user', user.email);
         window.location.href = '../general/';
     }
@@ -38,6 +39,7 @@ if (loginTab && signupTab && submitButton) {
         loginTab.classList.add('active');
         signupTab.classList.remove('active');
         submitButton.textContent = 'Log In';
+        if (statusMessage) statusMessage.textContent = '';
     });
 
     signupTab.addEventListener('click', () => {
@@ -45,6 +47,7 @@ if (loginTab && signupTab && submitButton) {
         signupTab.classList.add('active');
         loginTab.classList.remove('active');
         submitButton.textContent = 'Sign Up';
+        if (statusMessage) statusMessage.textContent = '';
     });
 }
 
@@ -77,8 +80,6 @@ if (authForm) {
                         return nextOrder;
                     });
 
-                    console.log("Aurora Registration ID:", registrationOrder);
-
                     await runTransaction(db, async (transaction) => {
                         const userRef = doc(db, "users", userId);
                         transaction.set(userRef, {
@@ -88,11 +89,27 @@ if (authForm) {
                             createdAt: new Date().toISOString()
                         });
                     });
+
+                    if (statusMessage) {
+                        statusMessage.textContent = `Success! Your Registration ID is #${registrationOrder}`;
+                    }
+
+                    localStorage.setItem('aurora_user', email);
+                    setTimeout(() => {
+                        window.location.href = '../general/';
+                    }, 2000);
+
                 } else {
                     await signInWithEmailAndPassword(auth, email, password);
+                    localStorage.setItem('aurora_user', email);
+                    window.location.href = '../general/';
                 }
             } catch (error) {
-                alert("Authentication failed: " + error.message);
+                if (statusMessage) {
+                    statusMessage.textContent = "Authentication failed: " + error.message;
+                } else {
+                    alert("Authentication failed: " + error.message);
+                }
             }
         }
     });
