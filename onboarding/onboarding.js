@@ -1,6 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
-import { getFirestore, doc, runTransaction } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyCLKCCpNbCs2AJm7g0JtGIjL43X5hr31N8",
@@ -14,7 +13,6 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app);
 
 const authForm = document.getElementById('auth-form');
 const emailInput = document.getElementById('email-input');
@@ -57,36 +55,8 @@ if (authForm) {
         if (email && password) {
             try {
                 if (isSignUpMode) {
-                    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-                    const user = userCredential.user;
-                    const userId = user.uid;
-
-                    const counterRef = doc(db, "metadata", "userCounter");
-                    
-                    const registrationOrder = await runTransaction(db, async (transaction) => {
-                        const counterSnapshot = await transaction.get(counterRef);
-                        
-                        let nextOrder = 1;
-                        if (counterSnapshot.exists()) {
-                            nextOrder = counterSnapshot.data().totalUsers + 1;
-                            transaction.update(counterRef, { totalUsers: nextOrder });
-                        } else {
-                            transaction.set(counterRef, { totalUsers: 1 });
-                        }
-                        
-                        return nextOrder;
-                    });
-
-                    await runTransaction(db, async (transaction) => {
-                        const userRef = doc(db, "users", userId);
-                        transaction.set(userRef, {
-                            uid: userId,
-                            email: email,
-                            registrationOrder: registrationOrder,
-                            createdAt: new Date().toISOString()
-                        });
-                    });
-
+                    // Triggers the backend Cloud Function automatically to handle ID, IP, and Firestore user doc
+                    await createUserWithEmailAndPassword(auth, email, password);
                     localStorage.setItem('aurora_user', email);
                     window.location.href = '../general/';
                 } else {
