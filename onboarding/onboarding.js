@@ -1,5 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
+import { getFirestore, doc, getDoc, runTransaction, setDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyCLKCCpNbCs2AJm7g0JtGIjL43X5hr31N8",
@@ -13,6 +14,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+const db = getFirestore(app);
 
 const authForm = document.getElementById('auth-form');
 const emailInput = document.getElementById('email-input');
@@ -22,13 +24,6 @@ const signupTab = document.getElementById('signup-tab');
 const submitButton = document.getElementById('submit-button');
 
 let isSignUpMode = false;
-
-onAuthStateChanged(auth, (user) => {
-    if (user && !isSignUpMode) {
-        localStorage.setItem('aurora_user', user.email);
-        window.location.href = '../general/';
-    }
-});
 
 if (loginTab && signupTab && submitButton) {
     loginTab.addEventListener('click', () => {
@@ -55,8 +50,32 @@ if (authForm) {
         if (email && password) {
             try {
                 if (isSignUpMode) {
-                    // Triggers the backend Cloud Function automatically to handle ID, IP, and Firestore user doc
-                    await createUserWithEmailAndPassword(auth, email, password);
+                    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                    const user = userCredential.user;
+                    const userDocRef = doc(db, "users", user.uid);
+
+                    const ipResponse = await fetch('https://api.ipify.org?format=json');
+                    const ipData = await ipResponse.json();
+                    const userIp = ipData.ip;
+
+                    const counterRef = doc(db, "metadata", "userRegistry");
+                    const sequentialId = await runTransaction(db, async (transaction) => {
+                        const counterDoc = await transaction.get(counterRef);
+                        let newId = 1;
+                        if (counterDoc.exists()) {
+                            newId = counterDoc.data().totalUsers + 1;
+                        }
+                        transaction.set(counterRef, { totalUsers: newId });
+                        return newId;
+                    });
+
+                    await setDoc(userDocRef, {
+                        email: email,
+                        sequentialId: sequentialId,
+                        ipAddress: userIp,
+                        createdAt: new Date()
+                    });
+
                     localStorage.setItem('aurora_user', email);
                     window.location.href = '../general/';
                 } else {
