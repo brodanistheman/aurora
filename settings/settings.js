@@ -49,9 +49,6 @@ onAuthStateChanged(auth, async (user) => {
                     displayNameInput.value = existingDisplayName;
                     usernameInput.value = existingUsername;
 
-                    if (existingDisplayName) {
-                        displayNameInput.disabled = true;
-                    }
                     if (existingUsername) {
                         usernameInput.disabled = true;
                     }
@@ -72,18 +69,18 @@ if (updateInfoForm) {
         e.preventDefault();
         const user = auth.currentUser;
         if (user) {
-            if (existingDisplayName && existingUsername) {
-                alert("Your username and display name have already been set. Please wait 7 days before making further changes.");
-                return;
-            }
-
             try {
                 const userRef = doc(db, "users", user.uid);
                 
-                await updateDoc(userRef, {
-                    displayName: displayNameInput.value.trim(),
-                    username: usernameInput.value.trim()
-                });
+                const updateData = {
+                    displayName: displayNameInput.value.trim()
+                };
+
+                if (!existingUsername) {
+                    updateData.username = usernameInput.value.trim();
+                }
+
+                await updateDoc(userRef, updateData);
 
                 alert("Account details updated successfully!");
             } catch (error) {
