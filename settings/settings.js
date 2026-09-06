@@ -22,24 +22,24 @@ const settingsButton = document.getElementById('settings-button');
 
 onAuthStateChanged(auth, async (user) => {
     if (user) {
-        try {
-            const userRef = doc(db, "users", user.uid);
-            const userSnapshot = await getDoc(userRef);
+        if (userInfoElement) {
+            try {
+                const userRef = doc(db, "users", user.uid);
+                const userSnapshot = await getDoc(userRef);
 
-            if (userSnapshot.exists()) {
-                const userData = userSnapshot.data();
-                if (userInfoElement) {
+                if (userSnapshot.exists()) {
+                    const userData = userSnapshot.data();
                     userInfoElement.innerHTML = `
                         <p>Email: ${userData.email}</p>
                         <p>Registration ID: #${userData.sequentialId}</p>
                         <p>IP Address: ${userData.ipAddress}</p>
                     `;
+                } else {
+                    userInfoElement.textContent = "User profile not found.";
                 }
-            } else {
-                if (userInfoElement) userInfoElement.textContent = "User profile not found.";
+            } catch (error) {
+                userInfoElement.textContent = "Failed to load user data.";
             }
-        } catch (error) {
-            if (userInfoElement) userInfoElement.textContent = "Failed to load user data.";
         }
     } else {
         window.location.href = '/aurora/';
@@ -56,6 +56,6 @@ if (logoutButton) {
 
 if (settingsButton) {
     settingsButton.addEventListener('click', () => {
-        window.location.href = '/aurora/settings/';
+        window.location.href = '/aurora/settings/account/';
     });
 }

@@ -54,6 +54,6 @@ if (logoutButton) {
 
 if (settingsButton) {
     settingsButton.addEventListener('click', () => {
-        window.location.href = '../settings/';
+        window.location.href = '/aurora/settings/account/';
     });
 }
