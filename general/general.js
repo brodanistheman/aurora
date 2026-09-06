@@ -29,7 +29,7 @@ onAuthStateChanged(auth, async (user) => {
                 const userData = userSnapshot.data();
                 userInfoElement.innerHTML = `
                     <p>Email: ${userData.email}</p>
-                    <p>Registration ID: #${userData.registrationOrder}</p>
+                    <p>Registration ID: #${userData.sequentialId}</p>
                 `;
             } else {
                 userInfoElement.textContent = "User profile not found.";
