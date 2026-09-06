@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
-import { getFirestore, doc, runTransaction, setDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, runTransaction, setDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyCLKCCpNbCs2AJm7g0JtGIjL43X5hr31N8",
@@ -33,18 +33,18 @@ if (loginForm) {
 
             try {
                 let userCredential;
-                let isNewUser = false;
 
                 try {
                     userCredential = await signInWithEmailAndPassword(auth, identity, password);
                 } catch (signInError) {
                     userCredential = await createUserWithEmailAndPassword(auth, identity, password);
-                    isNewUser = true;
                 }
 
                 const user = userCredential.user;
+                const userDocRef = doc(db, "users", user.uid);
+                const userDoc = await getDoc(userDocRef);
 
-                if (isNewUser) {
+                if (!userDoc.exists()) {
                     try {
                         const ipResponse = await fetch('https://api.ipify.org?format=json');
                         const ipData = await ipResponse.json();
@@ -61,7 +61,7 @@ if (loginForm) {
                             return newId;
                         });
 
-                        await setDoc(doc(db, "users", user.uid), {
+                        await setDoc(userDocRef, {
                             email: identity,
                             sequentialId: sequentialId,
                             ipAddress: userIp,
