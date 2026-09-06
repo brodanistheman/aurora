@@ -69,7 +69,7 @@ if (loginForm) {
                 }
 
                 localStorage.setItem('aurora_user', identity);
-                window.location.href = '../general/';
+                window.location.href = '/aurora/general/';
             } catch (error) {
                 console.error("Provisioning error details:", error);
                 alert("Operation failed: " + error.message);
