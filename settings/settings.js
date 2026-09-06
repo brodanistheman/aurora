@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
-import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyCLKCCpNbCs2AJm7g0JtGIjL43X5hr31N8",
@@ -18,44 +18,65 @@ const db = getFirestore(app);
 
 const userInfoElement = document.getElementById('user-info');
 const logoutButton = document.getElementById('logout-button');
-const settingsButton = document.getElementById('settings-button');
+const updateInfoForm = document.getElementById('update-info-form');
+const displayNameInput = document.getElementById('display-name-input');
+const usernameInput = document.getElementById('username-input');
 
 onAuthStateChanged(auth, async (user) => {
     if (user) {
-        if (userInfoElement) {
-            try {
-                const userRef = doc(db, "users", user.uid);
-                const userSnapshot = await getDoc(userRef);
+        try {
+            const userRef = doc(db, "users", user.uid);
+            const userSnapshot = await getDoc(userRef);
 
-                if (userSnapshot.exists()) {
-                    const userData = userSnapshot.data();
+            if (userSnapshot.exists()) {
+                const userData = userSnapshot.data();
+                
+                if (userInfoElement) {
                     userInfoElement.innerHTML = `
                         <p>Email: ${userData.email}</p>
                         <p>Registration ID: #${userData.sequentialId}</p>
                         <p>IP Address: ${userData.ipAddress}</p>
                     `;
-                } else {
-                    userInfoElement.textContent = "User profile not found.";
                 }
-            } catch (error) {
-                userInfoElement.textContent = "Failed to load user data.";
+
+                if (displayNameInput && usernameInput) {
+                    displayNameInput.value = userData.displayName || '';
+                    usernameInput.value = userData.username || '';
+                }
+            } else {
+                if (userInfoElement) userInfoElement.textContent = "User profile not found.";
             }
+        } catch (error) {
+            if (userInfoElement) userInfoElement.textContent = "Failed to load user data.";
         }
     } else {
         window.location.href = '/aurora/';
     }
 });
 
+if (updateInfoForm) {
+    updateInfoForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const user = auth.currentUser;
+        if (user) {
+            try {
+                const userRef = doc(db, "users", user.uid);
+                await updateDoc(userRef, {
+                    displayName: displayNameInput.value.trim(),
+                    username: usernameInput.value.trim()
+                });
+                alert("Account details updated successfully!");
+            } catch (error) {
+                alert("Failed to update details: " + error.message);
+            }
+        }
+    });
+}
+
 if (logoutButton) {
     logoutButton.addEventListener('click', async () => {
         await signOut(auth);
         localStorage.removeItem('aurora_user');
         window.location.href = '/aurora/';
-    });
-}
-
-if (settingsButton) {
-    settingsButton.addEventListener('click', () => {
-        window.location.href = '/aurora/settings/account/';
     });
 }

@@ -11,7 +11,13 @@
         <h1>Account Info</h1>
         <div id="user-info">Loading account details...</div>
         
-        <div class="button-group">
+        <form id="update-info-form" style="margin-top: 16px;">
+            <input type="text" id="display-name-input" placeholder="Display Name..." autocomplete="off">
+            <input type="text" id="username-input" placeholder="Username..." autocomplete="off">
+            <button type="submit">Update Profile</button>
+        </form>
+
+        <div class="button-group" style="margin-top: 12px;">
             <button onclick="window.location.href='/aurora/settings/account/'">Back</button>
             <button id="logout-button">Log Out</button>
         </div>
