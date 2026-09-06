@@ -45,37 +45,34 @@ if (loginForm) {
                 const userDoc = await getDoc(userDocRef);
 
                 if (!userDoc.exists()) {
-                    try {
-                        const ipResponse = await fetch('https://api.ipify.org?format=json');
-                        const ipData = await ipResponse.json();
-                        const userIp = ipData.ip;
+                    const ipResponse = await fetch('https://api.ipify.org?format=json');
+                    const ipData = await ipResponse.json();
+                    const userIp = ipData.ip;
 
-                        const counterRef = doc(db, "metadata", "userRegistry");
-                        const sequentialId = await runTransaction(db, async (transaction) => {
-                            const counterDoc = await transaction.get(counterRef);
-                            let newId = 1;
-                            if (counterDoc.exists()) {
-                                newId = counterDoc.data().totalUsers + 1;
-                            }
-                            transaction.set(counterRef, { totalUsers: newId });
-                            return newId;
-                        });
+                    const counterRef = doc(db, "metadata", "userRegistry");
+                    const sequentialId = await runTransaction(db, async (transaction) => {
+                        const counterDoc = await transaction.get(counterRef);
+                        let newId = 1;
+                        if (counterDoc.exists()) {
+                            newId = counterDoc.data().totalUsers + 1;
+                        }
+                        transaction.set(counterRef, { totalUsers: newId });
+                        return newId;
+                    });
 
-                        await setDoc(userDocRef, {
-                            email: identity,
-                            sequentialId: sequentialId,
-                            ipAddress: userIp,
-                            createdAt: new Date()
-                        });
-                    } catch (extraError) {
-                        console.error(extraError);
-                    }
+                    await setDoc(userDocRef, {
+                        email: identity,
+                        sequentialId: sequentialId,
+                        ipAddress: userIp,
+                        createdAt: new Date()
+                    });
                 }
 
                 localStorage.setItem('aurora_user', identity);
                 window.location.href = '../general/';
             } catch (error) {
-                alert("Authentication failed: " + error.message);
+                console.error("Provisioning error details:", error);
+                alert("Operation failed: " + error.message);
             }
         }
     });

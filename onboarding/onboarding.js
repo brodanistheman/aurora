@@ -75,14 +75,19 @@ if (authForm) {
                         ipAddress: userIp,
                         createdAt: new Date()
                     });
-
-                    localStorage.setItem('aurora_user', email);
-                    window.location.href = '../general/';
                 } else {
-                    await signInWithEmailAndPassword(auth, email, password);
-                    localStorage.setItem('aurora_user', email);
-                    window.location.href = '../general/';
+                    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+                    const user = userCredential.user;
+                    const userDocRef = doc(db, "users", user.uid);
+                    const userSnapshot = await getDoc(userDocRef);
+
+                    if (!userSnapshot.exists()) {
+                        throw new Error("User profile not found in database.");
+                    }
                 }
+
+                localStorage.setItem('aurora_user', email);
+                window.location.href = '../general/';
             } catch (error) {
                 alert("Authentication failed: " + error.message);
             }
