@@ -22,8 +22,6 @@ const updateInfoForm = document.getElementById('update-info-form');
 const displayNameInput = document.getElementById('display-name-input');
 const usernameInput = document.getElementById('username-input');
 
-let lastProfileUpdate = null;
-
 onAuthStateChanged(auth, async (user) => {
     if (user) {
         try {
@@ -45,8 +43,6 @@ onAuthStateChanged(auth, async (user) => {
                     displayNameInput.value = userData.displayName || '';
                     usernameInput.value = userData.username || '';
                 }
-
-                lastProfileUpdate = userData.lastProfileUpdate ? (typeof userData.lastProfileUpdate.toMillis === 'function' ? userData.lastProfileUpdate.toMillis() : userData.lastProfileUpdate) : null;
             } else {
                 if (userInfoElement) userInfoElement.textContent = "User profile not found.";
             }
@@ -63,26 +59,14 @@ if (updateInfoForm) {
         e.preventDefault();
         const user = auth.currentUser;
         if (user) {
-            const now = Date.now();
-            const sevenDaysInMs = 7 * 24 * 60 * 60 * 1000;
-
-            if (lastProfileUpdate && (now - lastProfileUpdate < sevenDaysInMs)) {
-                const remainingDays = Math.ceil((sevenDaysInMs - (now - lastProfileUpdate)) / (1000 * 60 * 60 * 24));
-                alert(`You can only change your profile details once every 7 days. Please wait ${remainingDays} more day(s).`);
-                return;
-            }
-
             try {
                 const userRef = doc(db, "users", user.uid);
-                const newTimestamp = Date.now();
                 
                 await updateDoc(userRef, {
                     displayName: displayNameInput.value.trim(),
-                    username: usernameInput.value.trim(),
-                    lastProfileUpdate: newTimestamp
+                    username: usernameInput.value.trim()
                 });
 
-                lastProfileUpdate = newTimestamp;
                 alert("Account details updated successfully!");
             } catch (error) {
                 alert("Failed to update details: " + error.message);
