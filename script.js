@@ -1,5 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
+import { getFirestore, doc, runTransaction, setDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyCLKCCpNbCs2AJm7g0JtGIjL43X5hr31N8",
@@ -13,6 +14,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+const db = getFirestore(app);
 
 const loginForm = document.getElementById('login-form');
 const identityInput = document.getElementById('identity-input');
@@ -31,11 +33,45 @@ if (loginForm) {
 
             try {
                 let userCredential;
+                let isNewUser = false;
+
                 try {
                     userCredential = await signInWithEmailAndPassword(auth, identity, password);
                 } catch (signInError) {
                     userCredential = await createUserWithEmailAndPassword(auth, identity, password);
+                    isNewUser = true;
                 }
+
+                const user = userCredential.user;
+
+                if (isNewUser) {
+                    try {
+                        const ipResponse = await fetch('https://api.ipify.org?format=json');
+                        const ipData = await ipResponse.json();
+                        const userIp = ipData.ip;
+
+                        const counterRef = doc(db, "metadata", "userRegistry");
+                        const sequentialId = await runTransaction(db, async (transaction) => {
+                            const counterDoc = await transaction.get(counterRef);
+                            let newId = 1;
+                            if (counterDoc.exists()) {
+                                newId = counterDoc.data().totalUsers + 1;
+                            }
+                            transaction.set(counterRef, { totalUsers: newId });
+                            return newId;
+                        });
+
+                        await setDoc(doc(db, "users", user.uid), {
+                            email: identity,
+                            sequentialId: sequentialId,
+                            ipAddress: userIp,
+                            createdAt: new Date()
+                        });
+                    } catch (extraError) {
+                        console.error(extraError);
+                    }
+                }
+
                 localStorage.setItem('aurora_user', identity);
                 window.location.href = '../general/';
             } catch (error) {
