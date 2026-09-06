@@ -23,7 +23,7 @@ const displayNameInput = document.getElementById('display-name-input');
 const usernameInput = document.getElementById('username-input');
 
 let existingUsername = "";
-let existingDisplayName = "";
+let lastProfileUpdate = null;
 
 onAuthStateChanged(auth, async (user) => {
     if (user) {
@@ -43,16 +43,17 @@ onAuthStateChanged(auth, async (user) => {
                 }
 
                 if (displayNameInput && usernameInput) {
-                    existingDisplayName = userData.displayName || '';
                     existingUsername = userData.username || '';
                     
-                    displayNameInput.value = existingDisplayName;
+                    displayNameInput.value = userData.displayName || '';
                     usernameInput.value = existingUsername;
 
                     if (existingUsername) {
                         usernameInput.disabled = true;
                     }
                 }
+
+                lastProfileUpdate = userData.lastProfileUpdate ? (typeof userData.lastProfileUpdate.toMillis === 'function' ? userData.lastProfileUpdate.toMillis() : userData.lastProfileUpdate) : null;
             } else {
                 if (userInfoElement) userInfoElement.textContent = "User profile not found.";
             }
@@ -69,11 +70,22 @@ if (updateInfoForm) {
         e.preventDefault();
         const user = auth.currentUser;
         if (user) {
+            const now = Date.now();
+            const sevenDaysInMs = 7 * 24 * 60 * 60 * 1000;
+
+            if (lastProfileUpdate && (now - lastProfileUpdate < sevenDaysInMs)) {
+                const remainingDays = Math.ceil((sevenDaysInMs - (now - lastProfileUpdate)) / (1000 * 60 * 60 * 24));
+                alert(`Your display name was changed recently. Please wait ${remainingDays} more day(s).`);
+                return;
+            }
+
             try {
                 const userRef = doc(db, "users", user.uid);
+                const newTimestamp = Date.now();
                 
                 const updateData = {
-                    displayName: displayNameInput.value.trim()
+                    displayName: displayNameInput.value.trim(),
+                    lastProfileUpdate: newTimestamp
                 };
 
                 if (!existingUsername) {
@@ -82,6 +94,7 @@ if (updateInfoForm) {
 
                 await updateDoc(userRef, updateData);
 
+                lastProfileUpdate = newTimestamp;
                 alert("Account details updated successfully!");
             } catch (error) {
                 alert("Failed to update details: " + error.message);
