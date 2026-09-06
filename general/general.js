@@ -18,6 +18,7 @@ const db = getFirestore(app);
 
 const userInfoElement = document.getElementById('user-info');
 const logoutButton = document.getElementById('logout-button');
+const settingsButton = document.getElementById('settings-button');
 
 onAuthStateChanged(auth, async (user) => {
     if (user) {
@@ -31,7 +32,6 @@ onAuthStateChanged(auth, async (user) => {
                     <p>Email: ${userData.email}</p>
                     <p>Registration ID: #${userData.sequentialId}</p>
                     <p>IP Address: ${userData.ipAddress}</p>
-                    <small style="color: #000000ab;">Your IP address is collected to support site features and functionality.</small>
                 `;
             } else {
                 userInfoElement.textContent = "User profile not found.";
@@ -49,5 +49,11 @@ if (logoutButton) {
         await signOut(auth);
         localStorage.removeItem('aurora_user');
         window.location.href = '../';
+    });
+}
+
+if (settingsButton) {
+    settingsButton.addEventListener('click', () => {
+        window.location.href = '../settings/';
     });
 }
