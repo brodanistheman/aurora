@@ -22,6 +22,9 @@ const updateInfoForm = document.getElementById('update-info-form');
 const displayNameInput = document.getElementById('display-name-input');
 const usernameInput = document.getElementById('username-input');
 
+let existingUsername = "";
+let existingDisplayName = "";
+
 onAuthStateChanged(auth, async (user) => {
     if (user) {
         try {
@@ -40,8 +43,18 @@ onAuthStateChanged(auth, async (user) => {
                 }
 
                 if (displayNameInput && usernameInput) {
-                    displayNameInput.value = userData.displayName || '';
-                    usernameInput.value = userData.username || '';
+                    existingDisplayName = userData.displayName || '';
+                    existingUsername = userData.username || '';
+                    
+                    displayNameInput.value = existingDisplayName;
+                    usernameInput.value = existingUsername;
+
+                    if (existingDisplayName) {
+                        displayNameInput.disabled = true;
+                    }
+                    if (existingUsername) {
+                        usernameInput.disabled = true;
+                    }
                 }
             } else {
                 if (userInfoElement) userInfoElement.textContent = "User profile not found.";
@@ -59,6 +72,11 @@ if (updateInfoForm) {
         e.preventDefault();
         const user = auth.currentUser;
         if (user) {
+            if (existingDisplayName && existingUsername) {
+                alert("Your username and display name have already been set and cannot be changed.");
+                return;
+            }
+
             try {
                 const userRef = doc(db, "users", user.uid);
                 
