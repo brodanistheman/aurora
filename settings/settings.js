@@ -73,7 +73,7 @@ if (updateInfoForm) {
         const user = auth.currentUser;
         if (user) {
             if (existingDisplayName && existingUsername) {
-                alert("Your username and display name have already been set and cannot be changed.");
+                alert("Your username and display name have already been set. Please wait 7 days before making further changes.");
                 return;
             }
 
