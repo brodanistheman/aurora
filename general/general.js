@@ -31,7 +31,7 @@ onAuthStateChanged(auth, async (user) => {
                     <p>Email: ${userData.email}</p>
                     <p>Registration ID: #${userData.sequentialId}</p>
                     <p>IP Address: ${userData.ipAddress}</p>
-                    <small style="color: #333333;">Your IP address is collected to support site features and functionality.</small>
+                    <small style="color: #cccccc;">Your IP address is collected to support site features and functionality.</small>
                 `;
             } else {
                 userInfoElement.textContent = "User profile not found.";
