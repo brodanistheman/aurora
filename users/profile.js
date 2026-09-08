@@ -20,7 +20,7 @@ const urlParams = new URLSearchParams(window.location.search);
 const targetSequentialId = urlParams.get('id') || window.__AURORA_USER_ID__;
 
 function validateName(value) {
-    const regex = /^[1-9][0-9_]*$/;
+    const regex = /^[a-zA-Z1-9][a-zA-Z0-9_]*$/;
     return regex.test(value);
 }
 
