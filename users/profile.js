@@ -19,6 +19,8 @@ const profileContent = document.getElementById('profile-content');
 const urlParams = new URLSearchParams(window.location.search);
 const targetSequentialId = urlParams.get('id') || window.__AURORA_USER_ID__;
 
+console.log("Aurora Debug: Target ID detected ->", targetSequentialId);
+
 async function loadProfile() {
     if (!targetSequentialId) {
         if (profileContent) profileContent.textContent = "No user specified.";
@@ -30,6 +32,8 @@ async function loadProfile() {
         const usersRef = collection(db, "users");
         const q = query(usersRef, where("sequentialId", "==", Number(targetSequentialId)));
         const querySnapshot = await getDocs(q);
+
+        console.log("Aurora Debug: Query snapshot empty? ->", querySnapshot.empty);
 
         if (!querySnapshot.empty) {
             const userDoc = querySnapshot.docs[0];
@@ -52,6 +56,7 @@ async function loadProfile() {
             document.title = "User Not Found - Aurora";
         }
     } catch (error) {
+        console.error("Aurora Debug: Firebase error ->", error);
         if (profileContent) profileContent.textContent = "Failed to load profile.";
         document.title = "Error - Aurora";
     }
