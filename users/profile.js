@@ -19,7 +19,10 @@ const profileContent = document.getElementById('profile-content');
 const urlParams = new URLSearchParams(window.location.search);
 const targetSequentialId = urlParams.get('id') || window.__AURORA_USER_ID__;
 
-console.log("Aurora Debug: Target ID detected ->", targetSequentialId);
+function validateName(value) {
+    const regex = /^[1-9][0-9_]*$/;
+    return regex.test(value);
+}
 
 async function loadProfile() {
     if (!targetSequentialId) {
@@ -33,22 +36,24 @@ async function loadProfile() {
         const q = query(usersRef, where("sequentialId", "==", Number(targetSequentialId)));
         const querySnapshot = await getDocs(q);
 
-        console.log("Aurora Debug: Query snapshot empty? ->", querySnapshot.empty);
-
         if (!querySnapshot.empty) {
             const userDoc = querySnapshot.docs[0];
             const userData = userDoc.data();
 
-            const displayName = userData.displayName || 'Unnamed User';
-            const username = userData.username || 'No username';
+            const fallbackName = `aurora_${targetSequentialId}`;
+            const rawDisplayName = userData.displayName;
+            const rawUsername = userData.username;
+
+            const displayName = rawDisplayName && validateName(rawDisplayName) ? rawDisplayName : fallbackName;
+            const username = rawUsername && validateName(rawUsername) ? rawUsername : fallbackName;
 
             document.title = `${displayName} - Aurora`;
 
             if (profileContent) {
                 profileContent.innerHTML = `
-                    <p><strong>Display Name:</strong> ${displayName}</p>
-                    <p><strong>Username:</strong> @${username}</p>
-                    <p><strong>Registration ID:</strong> #${userData.sequentialId}</p>
+                    <p>Display Name: ${displayName}</p>
+                    <p>Username: @${username}</p>
+                    <p>Registration ID: #${userData.sequentialId}</p>
                 `;
             }
         } else {
@@ -56,7 +61,6 @@ async function loadProfile() {
             document.title = "User Not Found - Aurora";
         }
     } catch (error) {
-        console.error("Aurora Debug: Firebase error ->", error);
         if (profileContent) profileContent.textContent = "Failed to load profile.";
         document.title = "Error - Aurora";
     }
