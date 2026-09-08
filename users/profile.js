@@ -25,8 +25,8 @@ function validateName(value) {
 }
 
 function renderProfileData(userData) {
-    const fallbackName = `aurora_${targetSequentialId}`;
-    const fallbackUsername = `@aurora_${targetSequentialId}`;
+    const fallbackName = `aurora_user_${targetSequentialId}`;
+    const fallbackUsername = `@aurora_user_${targetSequentialId}`;
     
     const rawDisplayName = userData.displayName;
     const rawUsername = userData.username;
