@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Profile - Aurora</title>
+    <link rel="stylesheet" href="/aurora/style.css">
+</head>
+<body>
+    <div class="dashboard-container">
+        <h1 id="profile-display-name">Loading Profile...</h1>
+        <div id="profile-info">
+            <p id="profile-username">Username: Loading...</p>
+            <p id="profile-email">Email: Loading...</p>
+        </div>
+        <div class="button-group" style="margin-top: 12px;">
+            <button onclick="window.location.href='/aurora/general/'">Back to Dashboard</button>
+        </div>
+    </div>
+
+    <script type="module" src="/aurora/users/profile/profile.js"></script>
+</body>
+</html>
