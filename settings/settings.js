@@ -21,6 +21,7 @@ const logoutButton = document.getElementById('logout-button');
 const updateInfoForm = document.getElementById('update-info-form');
 const displayNameInput = document.getElementById('display-name-input');
 const usernameInput = document.getElementById('username-input');
+const profileButton = document.getElementById('profile-button');
 
 let existingUsername = "";
 let lastProfileUpdate = null;
@@ -42,6 +43,13 @@ onAuthStateChanged(auth, async (user) => {
                         <p>Registration ID: #${userData.sequentialId}</p>
                         <p>IP Address: ${userData.ipAddress}</p>
                     `;
+                }
+
+                if (profileButton && userData.sequentialId) {
+                    profileButton.style.display = 'inline-block';
+                    profileButton.onclick = () => {
+                        window.location.href = `/aurora/users/profile/?id=${userData.sequentialId}`;
+                    };
                 }
 
                 if (displayNameInput && usernameInput) {
