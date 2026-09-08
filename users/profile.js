@@ -24,11 +24,39 @@ function validateName(value) {
     return regex.test(value);
 }
 
+function renderProfileData(userData) {
+    const fallbackName = `aurora_${targetSequentialId}`;
+    const fallbackUsername = `@aurora_${targetSequentialId}`;
+    
+    const rawDisplayName = userData.displayName;
+    const rawUsername = userData.username;
+
+    const displayName = rawDisplayName && validateName(rawDisplayName) ? rawDisplayName : fallbackName;
+    const username = rawUsername && validateName(rawUsername) ? rawUsername : fallbackUsername;
+
+    document.title = `${displayName} - Aurora`;
+
+    if (profileContent) {
+        profileContent.innerHTML = `
+            <p>Display Name: ${displayName}</p>
+            <p>Username: ${username.startsWith('@') ? username : '@' + username}</p>
+            <p>Registration ID: #${userData.sequentialId}</p>
+        `;
+    }
+}
+
 async function loadProfile() {
     if (!targetSequentialId) {
         if (profileContent) profileContent.textContent = "No user specified.";
         document.title = "User Not Found - Aurora";
         return;
+    }
+
+    const cacheKey = `aurora_profile_${targetSequentialId}`;
+    const cachedData = localStorage.getItem(cacheKey);
+
+    if (cachedData) {
+        renderProfileData(JSON.parse(cachedData));
     }
 
     try {
@@ -37,32 +65,18 @@ async function loadProfile() {
         const querySnapshot = await getDocs(q);
 
         if (!querySnapshot.empty) {
-            const userDoc = querySnapshot.docs[0];
-            const userData = userDoc.data();
-
-            const fallbackName = `aurora_${targetSequentialId}`;
-            const rawDisplayName = userData.displayName;
-            const rawUsername = userData.username;
-
-            const displayName = rawDisplayName && validateName(rawDisplayName) ? rawDisplayName : fallbackName;
-            const username = rawUsername && validateName(rawUsername) ? rawUsername : fallbackName;
-
-            document.title = `${displayName} - Aurora`;
-
-            if (profileContent) {
-                profileContent.innerHTML = `
-                    <p>Display Name: ${displayName}</p>
-                    <p>Username: @${username}</p>
-                    <p>Registration ID: #${userData.sequentialId}</p>
-                `;
-            }
-        } else {
+            const userData = querySnapshot.docs[0].data();
+            localStorage.setItem(cacheKey, JSON.stringify(userData));
+            renderProfileData(userData);
+        } else if (!cachedData) {
             if (profileContent) profileContent.textContent = "User not found.";
             document.title = "User Not Found - Aurora";
         }
     } catch (error) {
-        if (profileContent) profileContent.textContent = "Failed to load profile.";
-        document.title = "Error - Aurora";
+        if (!cachedData) {
+            if (profileContent) profileContent.textContent = "Failed to load profile.";
+            document.title = "Error - Aurora";
+        }
     }
 }
 
