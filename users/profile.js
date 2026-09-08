@@ -14,28 +14,45 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
+const profileContent = document.getElementById('profile-content');
+
 const urlParams = new URLSearchParams(window.location.search);
-const userId = urlParams.get('id');
+const targetSequentialId = urlParams.get('id') || window.__AURORA_USER_ID__;
 
 async function loadProfile() {
-    if (!userId) {
-        document.title = "Profile Not Found - Aurora";
+    if (!targetSequentialId) {
+        if (profileContent) profileContent.textContent = "No user specified.";
+        document.title = "User Not Found - Aurora";
         return;
     }
 
     try {
         const usersRef = collection(db, "users");
-        const q = query(usersRef, where("sequentialId", "==", Number(userId)));
+        const q = query(usersRef, where("sequentialId", "==", Number(targetSequentialId)));
         const querySnapshot = await getDocs(q);
 
         if (!querySnapshot.empty) {
-            const userData = querySnapshot.docs[0].data();
-            const displayName = userData.displayName || 'User';
+            const userDoc = querySnapshot.docs[0];
+            const userData = userDoc.data();
+
+            const displayName = userData.displayName || 'Unnamed User';
+            const username = userData.username || 'No username';
+
             document.title = `${displayName} - Aurora`;
+
+            if (profileContent) {
+                profileContent.innerHTML = `
+                    <p><strong>Display Name:</strong> ${displayName}</p>
+                    <p><strong>Username:</strong> @${username}</p>
+                    <p><strong>Registration ID:</strong> #${userData.sequentialId}</p>
+                `;
+            }
         } else {
+            if (profileContent) profileContent.textContent = "User not found.";
             document.title = "User Not Found - Aurora";
         }
     } catch (error) {
+        if (profileContent) profileContent.textContent = "Failed to load profile.";
         document.title = "Error - Aurora";
     }
 }

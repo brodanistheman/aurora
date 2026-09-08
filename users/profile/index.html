@@ -3,9 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <base href="/aurora/users/profile/">
     <title>Aurora</title>
+    <link rel="stylesheet" href="../../style.css">
 </head>
 <body>
-    <script type="module" src="/aurora/users/profile/profile.js"></script>
+    <div class="dashboard-container">
+        <h1>User Profile</h1>
+        <div id="profile-content">Loading profile...</div>
+        <div class="button-group" style="margin-top: 16px;">
+            <button onclick="window.history.back()">Back</button>
+        </div>
+    </div>
+
+    <script type="module" src="../profile.js"></script>
 </body>
 </html>
