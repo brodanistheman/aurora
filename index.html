@@ -33,7 +33,6 @@
             const customPath = urlParams.get('p');
 
             if (customPath) {
-                // Let settings paths pass through to the physical directory
                 if (customPath.startsWith('/settings')) {
                     return;
                 }
