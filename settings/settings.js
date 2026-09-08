@@ -36,6 +36,8 @@ onAuthStateChanged(auth, async (user) => {
                 
                 if (userInfoElement) {
                     userInfoElement.innerHTML = `
+                        <p>Display Name: ${userData.displayName || 'Not set'}</p>
+                        <p>Username: ${userData.username || 'Not set'}</p>
                         <p>Email: ${userData.email}</p>
                         <p>Registration ID: #${userData.sequentialId}</p>
                         <p>IP Address: ${userData.ipAddress}</p>
@@ -96,6 +98,7 @@ if (updateInfoForm) {
 
                 lastProfileUpdate = newTimestamp;
                 alert("Account details updated successfully!");
+                window.location.reload();
             } catch (error) {
                 alert("Failed to update details: " + error.message);
             }
