@@ -8,7 +8,7 @@
         var l = window.location;
         var parts = l.pathname.split('/').filter(Boolean);
         
-        if (parts.length >= 4 && parts[1] === 'users' && parts[3] === 'profile') {
+        if (parts.length >= 3 && parts[1] === 'users' && l.pathname.endsWith('/profile/')) {
             var userId = parts[2];
             l.replace(l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') + '/' + parts[0] + '/users/profile/?id=' + userId + l.hash);
         } else {
