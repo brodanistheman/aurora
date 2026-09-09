@@ -21,36 +21,61 @@ const logoutButton = document.getElementById('logout-button');
 const settingsButton = document.getElementById('settings-button');
 const profileButton = document.getElementById('profile-button');
 
+function applyUserData(userData) {
+    if (userInfoElement) {
+        userInfoElement.innerHTML = `
+            <p>Email: ${userData.email}</p>
+            <p>Registration ID: #${userData.sequentialId}</p>
+            <p>IP Address: ${userData.ipAddress}</p>
+        `;
+    }
+
+    if (profileButton && userData.sequentialId) {
+        profileButton.style.display = 'inline-block';
+        profileButton.onclick = () => {
+            window.location.href = `/aurora/users/${userData.sequentialId}/profile/`;
+        };
+    }
+}
+
+const cachedSequentialId = localStorage.getItem('aurora_quick_id');
+if (cachedSequentialId && profileButton) {
+    profileButton.style.display = 'inline-block';
+    profileButton.onclick = () => {
+        window.location.href = `/aurora/users/${cachedSequentialId}/profile/`;
+    };
+}
+
 onAuthStateChanged(auth, async (user) => {
     if (user) {
+        const cacheKey = `aurora_user_cache_${user.uid}`;
+        const cachedData = localStorage.getItem(cacheKey);
+
+        if (cachedData) {
+            const parsed = JSON.parse(cachedData);
+            applyUserData(parsed);
+            localStorage.setItem('aurora_quick_id', parsed.sequentialId);
+        }
+
         try {
             const userRef = doc(db, "users", user.uid);
             const userSnapshot = await getDoc(userRef);
 
             if (userSnapshot.exists()) {
                 const userData = userSnapshot.data();
-                
-                if (userInfoElement) {
-                    userInfoElement.innerHTML = `
-                        <p>Email: ${userData.email}</p>
-                        <p>Registration ID: #${userData.sequentialId}</p>
-                        <p>IP Address: ${userData.ipAddress}</p>
-                    `;
-                }
-
-                if (profileButton && userData.sequentialId) {
-                    profileButton.style.display = 'inline-block';
-                    profileButton.onclick = () => {
-                        window.location.href = `/aurora/users/${userData.sequentialId}/profile/`;
-                    };
-                }
-            } else {
+                localStorage.setItem(cacheKey, JSON.stringify(userData));
+                localStorage.setItem('aurora_quick_id', userData.sequentialId);
+                applyUserData(userData);
+            } else if (!cachedData) {
                 if (userInfoElement) userInfoElement.textContent = "User profile not found.";
             }
         } catch (error) {
-            if (userInfoElement) userInfoElement.textContent = "Failed to load user data.";
+            if (!cachedData) {
+                if (userInfoElement) userInfoElement.textContent = "Failed to load user data.";
+            }
         }
     } else {
+        localStorage.removeItem('aurora_quick_id');
         window.location.href = '../';
     }
 });
@@ -58,7 +83,7 @@ onAuthStateChanged(auth, async (user) => {
 if (logoutButton) {
     logoutButton.addEventListener('click', async () => {
         await signOut(auth);
-        localStorage.removeItem('aurora_user');
+        localStorage.clear();
         window.location.href = '../';
     });
 }
