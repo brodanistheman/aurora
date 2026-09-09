@@ -21,6 +21,13 @@ const logoutButton = document.getElementById('logout-button');
 const settingsButton = document.getElementById('settings-button');
 const profileButton = document.getElementById('profile-button');
 
+const cachedSequentialId = localStorage.getItem('aurora_quick_id');
+if (cachedSequentialId && profileButton) {
+    profileButton.onclick = () => {
+        window.location.href = `/aurora/users/${cachedSequentialId}/profile/`;
+    };
+}
+
 function applyUserData(userData) {
     if (userInfoElement) {
         userInfoElement.innerHTML = `
@@ -31,19 +38,10 @@ function applyUserData(userData) {
     }
 
     if (profileButton && userData.sequentialId) {
-        profileButton.style.display = 'inline-block';
         profileButton.onclick = () => {
             window.location.href = `/aurora/users/${userData.sequentialId}/profile/`;
         };
     }
-}
-
-const cachedSequentialId = localStorage.getItem('aurora_quick_id');
-if (cachedSequentialId && profileButton) {
-    profileButton.style.display = 'inline-block';
-    profileButton.onclick = () => {
-        window.location.href = `/aurora/users/${cachedSequentialId}/profile/`;
-    };
 }
 
 onAuthStateChanged(auth, async (user) => {
