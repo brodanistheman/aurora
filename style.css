@@ -104,10 +104,9 @@ button:hover {
     color: #111111;
 }
 
-/* Added to remove the browser's default rounded focus ring */
 .tab-btn:focus {
     outline: none;
-    background: #f9f9f9; /* Optional: adds a subtle highlight instead of a frame */
+    background: #f9f9f9;
 }
 
 .button-group {
