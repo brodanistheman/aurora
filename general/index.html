@@ -5,20 +5,66 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Aurora</title>
     <link rel="stylesheet" href="../style.css">
+    <style>
+        .dashboard-layout {
+            display: flex;
+            gap: 20px;
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 20px;
+        }
+        .sidebar {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .chat-panel {
+            flex: 2;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #ccc;
+            padding: 15px;
+            border-radius: 8px;
+            background: #fff;
+        }
+        #message-box {
+            height: 350px;
+            overflow-y: scroll;
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin-bottom: 10px;
+            background: #fafafa;
+        }
+        .chat-input-group {
+            display: flex;
+            gap: 10px;
+        }
+        .chat-input-group input {
+            flex: 1;
+            padding: 8px;
+        }
+    </style>
 </head>
 <body>
-    <div class="dashboard-container">
-        <h1>Aurora</h1>
-        <div id="user-info"></div>
-        <div class="button-group">
-            <button id="profile-button" type="button">Profile</button>
-            <button id="settings-button" type="button">Settings</button>
-            <button id="logout-button" type="button">Log Out</button>
+    <div class="dashboard-layout">
+        <div class="sidebar">
+            <h1>Aurora</h1>
+            <div id="user-info"></div>
+            <div class="button-group" style="display: flex; flex-direction: column; gap: 10px;">
+                <button id="profile-button" type="button">Profile</button>
+                <button id="settings-button" type="button">Settings</button>
+                <button id="logout-button" type="button">Log Out</button>
+            </div>
         </div>
-        <div class="chat-container">
-            <div id="message-box" style="height: 300px; overflow-y: scroll; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px;"></div>
-            <input type="text" id="message-input" placeholder="Type a message..." />
-            <button id="send-button" type="button">Send</button>
+
+        <div class="chat-panel">
+            <h3>Community Chat</h3>
+            <div id="message-box"></div>
+            <div class="chat-input-group">
+                <input type="text" id="message-input" placeholder="Type a message..." />
+                <button id="send-button" type="button">Send</button>
+            </div>
         </div>
     </div>
 
