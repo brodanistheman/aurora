@@ -4,7 +4,6 @@
     box-sizing: border-box;
     margin: 0;
     padding: 0;
-    border-radius: 0 !important;
 }
 
 html, body {
@@ -44,6 +43,8 @@ html, body {
     background: #fff;
     height: calc(100vh - 40px);
     box-sizing: border-box;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
 #message-box {
@@ -56,6 +57,7 @@ html, body {
     display: flex;
     flex-direction: column;
     gap: 8px;
+    border-radius: 4px;
 }
 
 .chat-input-group {
@@ -73,6 +75,11 @@ html, body {
     font-size: 14px;
     outline: none;
     margin-bottom: 0;
+    border-radius: 4px;
+}
+
+.chat-input-group input:focus {
+    border-color: #111111;
 }
 
 .chat-input-group button {
@@ -88,6 +95,7 @@ html, body {
     font-family: 'Inter', sans-serif;
     font-weight: 500;
     font-size: 14px;
+    border-radius: 4px;
 }
 
 .chat-input-group button:hover {
@@ -98,6 +106,7 @@ html, body {
     background: #f1f1f1;
     padding: 8px 12px;
     word-break: break-word;
+    border-radius: 6px;
 }
 
 .chat-message span {
@@ -112,6 +121,7 @@ html, body {
     width: 100%;
     max-width: 400px;
     margin: auto;
+    border-radius: 8px;
 }
 
 h1, h2 {
@@ -131,11 +141,12 @@ input {
     color: #111111;
     font-family: 'Inter', sans-serif;
     font-size: 14px;
+    border-radius: 4px;
 }
 
 input:focus {
-    outline: 2px solid #111111;
-    outline-offset: -1px;
+    outline: none;
+    border-color: #111111;
 }
 
 button {
@@ -149,6 +160,7 @@ button {
     font-size: 14px;
     cursor: pointer;
     margin-top: 8px;
+    border-radius: 4px;
 }
 
 button:hover {
@@ -180,6 +192,7 @@ button:hover {
     color: #777777;
     cursor: pointer;
     margin-top: 0;
+    border-radius: 0;
 }
 
 .tab-btn.active {
