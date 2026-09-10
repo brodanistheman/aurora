@@ -30,11 +30,15 @@
         }
         #message-box {
             height: 350px;
-            overflow-y: scroll;
+            max-height: 350px;
+            overflow-y: auto;
             border: 1px solid #ddd;
             padding: 10px;
             margin-bottom: 10px;
             background: #fafafa;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
         }
         .chat-input-group {
             display: flex;
@@ -43,6 +47,17 @@
         .chat-input-group input {
             flex: 1;
             padding: 8px;
+            box-sizing: border-box;
+        }
+        .chat-message {
+            background: #f1f1f1;
+            padding: 8px 12px;
+            border-radius: 6px;
+            word-break: break-word;
+        }
+        .chat-message span {
+            font-weight: bold;
+            color: #333;
         }
     </style>
 </head>

@@ -24,8 +24,11 @@ const messageBox = document.getElementById('message-box');
 const messageInput = document.getElementById('message-input');
 const sendButton = document.getElementById('send-button');
 
+let currentUserSequentialId = null;
+
 const cachedSequentialId = localStorage.getItem('aurora_quick_id');
 if (cachedSequentialId && profileButton) {
+    currentUserSequentialId = cachedSequentialId;
     profileButton.onclick = () => {
         window.location.href = `/aurora/users/${cachedSequentialId}/profile/`;
     };
@@ -41,6 +44,7 @@ function applyUserData(userData) {
     }
 
     if (profileButton && userData.sequentialId) {
+        currentUserSequentialId = userData.sequentialId;
         profileButton.onclick = () => {
             window.location.href = `/aurora/users/${userData.sequentialId}/profile/`;
         };
@@ -55,9 +59,13 @@ function initChat() {
             messageBox.innerHTML = '';
             snapshot.forEach((doc) => {
                 const msg = doc.data();
-                const p = document.createElement('p');
-                p.textContent = `${msg.email || 'Anonymous'}: ${msg.text}`;
-                messageBox.appendChild(p);
+                const div = document.createElement('div');
+                div.className = 'chat-message';
+                
+                const senderDisplay = msg.sequentialId ? `#${msg.sequentialId}` : 'Anonymous';
+                
+                div.innerHTML = `<span>${senderDisplay}:</span> ${msg.text}`;
+                messageBox.appendChild(div);
             });
             messageBox.scrollTop = messageBox.scrollHeight;
         }
@@ -123,7 +131,7 @@ if (sendButton) {
             try {
                 await addDoc(collection(db, "messages"), {
                     uid: user.uid,
-                    email: user.email,
+                    sequentialId: currentUserSequentialId || localStorage.getItem('aurora_quick_id'),
                     text: text,
                     createdAt: serverTimestamp()
                 });
