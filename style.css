@@ -116,7 +116,7 @@ html, body {
 
 .chat-message .shield-icon {
     font-size: 0.85rem;
-    color: #e2e4ed;
+    color: #333;
     margin-left: 4px;
     display: inline-flex;
     align-items: center;
