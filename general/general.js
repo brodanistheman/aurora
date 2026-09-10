@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
-import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyCLKCCpNbCs2AJm7g0JtGIjL43X5hr31N8",
@@ -20,6 +20,9 @@ const userInfoElement = document.getElementById('user-info');
 const logoutButton = document.getElementById('logout-button');
 const settingsButton = document.getElementById('settings-button');
 const profileButton = document.getElementById('profile-button');
+const messageBox = document.getElementById('message-box');
+const messageInput = document.getElementById('message-input');
+const sendButton = document.getElementById('send-button');
 
 const cachedSequentialId = localStorage.getItem('aurora_quick_id');
 if (cachedSequentialId && profileButton) {
@@ -42,6 +45,23 @@ function applyUserData(userData) {
             window.location.href = `/aurora/users/${userData.sequentialId}/profile/`;
         };
     }
+}
+
+function initChat() {
+    const q = query(collection(db, "messages"), orderBy("createdAt", "asc"));
+
+    onSnapshot(q, (snapshot) => {
+        if (messageBox) {
+            messageBox.innerHTML = '';
+            snapshot.forEach((doc) => {
+                const msg = doc.data();
+                const p = document.createElement('p');
+                p.textContent = `${msg.email || 'Anonymous'}: ${msg.text}`;
+                messageBox.appendChild(p);
+            });
+            messageBox.scrollTop = messageBox.scrollHeight;
+        }
+    });
 }
 
 onAuthStateChanged(auth, async (user) => {
@@ -72,6 +92,8 @@ onAuthStateChanged(auth, async (user) => {
                 if (userInfoElement) userInfoElement.textContent = "Failed to load user data.";
             }
         }
+
+        initChat();
     } else {
         localStorage.removeItem('aurora_quick_id');
         window.location.href = '../';
@@ -89,5 +111,26 @@ if (logoutButton) {
 if (settingsButton) {
     settingsButton.addEventListener('click', () => {
         window.location.href = '/aurora/settings/account/';
+    });
+}
+
+if (sendButton) {
+    sendButton.addEventListener('click', async () => {
+        const text = messageInput.value.trim();
+        const user = auth.currentUser;
+
+        if (text && user) {
+            try {
+                await addDoc(collection(db, "messages"), {
+                    uid: user.uid,
+                    email: user.email,
+                    text: text,
+                    createdAt: serverTimestamp()
+                });
+                messageInput.value = '';
+            } catch (error) {
+                console.error("Error sending message: ", error);
+            }
+        }
     });
 }
