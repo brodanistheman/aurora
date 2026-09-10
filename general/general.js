@@ -34,8 +34,8 @@ if (cachedSequentialId && profileButton) {
 }
 
 function applyUserData(userData) {
-    if (userData.email) {
-        currentDisplayName = userData.email.split('@')[0];
+    if (userData.displayName) {
+        currentDisplayName = userData.displayName;
     }
 
     if (userInfoElement) {
@@ -76,10 +76,6 @@ function initChat() {
 
 onAuthStateChanged(auth, async (user) => {
     if (user) {
-        if (user.email) {
-            currentDisplayName = user.email.split('@')[0];
-        }
-
         const cacheKey = `aurora_user_cache_${user.uid}`;
         const cachedData = localStorage.getItem(cacheKey);
 
