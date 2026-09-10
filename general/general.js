@@ -56,6 +56,11 @@ function applyUserData(userData) {
 function initChat() {
     const q = query(collection(db, "messages"), orderBy("createdAt", "asc"));
 
+    const moderatorUids = [
+        "AQ1oLVW0fNgESU0H5GEvcycxYJ73",
+        "vmytwBIHywg7BoJWDnl1QOXXUh52"
+    ];
+
     onSnapshot(q, (snapshot) => {
         if (messageBox) {
             messageBox.innerHTML = '';
@@ -66,7 +71,10 @@ function initChat() {
                 
                 const senderDisplay = msg.displayName || 'Anonymous';
                 
-                div.innerHTML = `<span>${senderDisplay}:</span> ${msg.text}`;
+                const isMod = moderatorUids.includes(msg.uid);
+                const shieldHtml = isMod ? `<span class="shield-icon"><i class="fa-solid fa-shield-halved"></i></span>` : '';
+                
+                div.innerHTML = `<span>${senderDisplay}${shieldHtml}:</span> ${msg.text}`;
                 messageBox.appendChild(div);
             });
             messageBox.scrollTop = messageBox.scrollHeight;

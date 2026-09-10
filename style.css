@@ -114,6 +114,14 @@ html, body {
     color: #333;
 }
 
+.chat-message .shield-icon {
+    font-size: 0.85rem;
+    color: #e2e4ed;
+    margin-left: 4px;
+    display: inline-flex;
+    align-items: center;
+}
+
 .login-container {
     background-color: #ffffff;
     border: 1px solid #e0e0e0;
