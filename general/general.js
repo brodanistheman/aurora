@@ -24,7 +24,7 @@ const messageBox = document.getElementById('message-box');
 const messageInput = document.getElementById('message-input');
 const sendButton = document.getElementById('send-button');
 
-let currentUserDisplayName = null;
+let currentDisplayName = 'Anonymous';
 
 const cachedSequentialId = localStorage.getItem('aurora_quick_id');
 if (cachedSequentialId && profileButton) {
@@ -34,6 +34,10 @@ if (cachedSequentialId && profileButton) {
 }
 
 function applyUserData(userData) {
+    if (userData.email) {
+        currentDisplayName = userData.email.split('@')[0];
+    }
+
     if (userInfoElement) {
         userInfoElement.innerHTML = `
             <p>Email: ${userData.email}</p>
@@ -72,7 +76,10 @@ function initChat() {
 
 onAuthStateChanged(auth, async (user) => {
     if (user) {
-        currentUserDisplayName = user.email ? user.email.split('@')[0] : 'Anonymous';
+        if (user.email) {
+            currentDisplayName = user.email.split('@')[0];
+        }
+
         const cacheKey = `aurora_user_cache_${user.uid}`;
         const cachedData = localStorage.getItem(cacheKey);
 
@@ -130,7 +137,7 @@ if (sendButton) {
             try {
                 await addDoc(collection(db, "messages"), {
                     uid: user.uid,
-                    displayName: currentUserDisplayName || (user.email ? user.email.split('@')[0] : 'Anonymous'),
+                    displayName: currentDisplayName,
                     text: text,
                     createdAt: serverTimestamp()
                 });
