@@ -58,7 +58,8 @@ function initChat() {
 
     const moderatorUids = [
         "AQ1oLVW0fNgESU0H5GEvcycxYJ73",
-        "vmytwBIHywg7BoJWDnl1QOXXUh52"
+        "vmytwBIHywg7BoJWDnl1QOXXUh52",
+        "IW24TCbQSkamV2LdxSFObbBg9u73"
     ];
 
     onSnapshot(q, (snapshot) => {
@@ -138,26 +139,6 @@ if (sendButton) {
         const user = auth.currentUser;
 
         if (text && user) {
-            const moderatorUids = [
-                "AQ1oLVW0fNgESU0H5GEvcycxYJ73",
-                "vmytwBIHywg7BoJWDnl1QOXXUh52"
-            ];
-
-            if (text === '/clear' && moderatorUids.includes(user.uid)) {
-                try {
-                    const querySnapshot = await getDocs(collection(db, "messages"));
-                    const deletePromises = querySnapshot.docs.map((document) => 
-                        deleteDoc(doc(db, "messages", document.id))
-                    );
-                    await Promise.all(deletePromises);
-                    console.log("All messages cleared by moderator!");
-                    messageInput.value = '';
-                } catch (error) {
-                    console.error("Error clearing messages: ", error);
-                }
-                return;
-            }
-
             try {
                 await addDoc(collection(db, "messages"), {
                     uid: user.uid,
