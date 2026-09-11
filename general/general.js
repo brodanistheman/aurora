@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyCLKCCpNbCs2AJm7g0JtGIjL43X5hr31N8",
@@ -138,6 +138,26 @@ if (sendButton) {
         const user = auth.currentUser;
 
         if (text && user) {
+            const moderatorUids = [
+                "AQ1oLVW0fNgESU0H5GEvcycxYJ73",
+                "vmytwBIHywg7BoJWDnl1QOXXUh52"
+            ];
+
+            if (text === '/clear' && moderatorUids.includes(user.uid)) {
+                try {
+                    const querySnapshot = await getDocs(collection(db, "messages"));
+                    const deletePromises = querySnapshot.docs.map((document) => 
+                        deleteDoc(doc(db, "messages", document.id))
+                    );
+                    await Promise.all(deletePromises);
+                    console.log("All messages cleared by moderator!");
+                    messageInput.value = '';
+                } catch (error) {
+                    console.error("Error clearing messages: ", error);
+                }
+                return;
+            }
+
             try {
                 await addDoc(collection(db, "messages"), {
                     uid: user.uid,
@@ -152,3 +172,12 @@ if (sendButton) {
         }
     });
 }
+
+window.clearMessagesCollection = async function() {
+    const querySnapshot = await getDocs(collection(db, "messages"));
+    const deletePromises = querySnapshot.docs.map((document) => 
+        deleteDoc(doc(db, "messages", document.id))
+    );
+    await Promise.all(deletePromises);
+    console.log("All messages deleted successfully!");
+};
