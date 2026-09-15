@@ -177,14 +177,21 @@ async function sendChatMessage(text, file) {
 if (sendButton) {
     sendButton.addEventListener('click', () => {
         const text = messageInput.value.trim();
-        const file = imageInput.files[0] || null;
-        sendChatMessage(text, file);
+        sendChatMessage(text, null);
     });
 }
 
 if (uploadBtn && imageInput) {
     uploadBtn.addEventListener('click', () => {
         imageInput.click();
+    });
+
+    imageInput.addEventListener('change', () => {
+        const file = imageInput.files[0];
+        if (file) {
+            const text = messageInput.value.trim();
+            sendChatMessage(text, file);
+        }
     });
 }
 
