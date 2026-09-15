@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
-import { getFirestore, collection, query, where, getDocs, doc, updateDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+import { getFirestore, collection, query, where, getDocs, doc, updateDoc, writeBatch } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyCLKCCpNbCs2AJm7g0JtGIjL43X5hr31N8",
@@ -141,10 +141,20 @@ if (uploadPicButton && profilePicInput) {
                     profilePic: base64data
                 });
 
+                const messagesRef = collection(db, "messages");
+                const qMessages = query(messagesRef, where("uid", "==", user.uid));
+                const messageSnapshot = await getDocs(qMessages);
+
+                const batch = writeBatch(db);
+                messageSnapshot.forEach((msgDoc) => {
+                    batch.update(msgDoc.ref, { profilePic: base64data });
+                });
+                await batch.commit();
+
                 localStorage.removeItem(`aurora_profile_${targetSequentialId}`);
                 localStorage.removeItem(`aurora_user_cache_${user.uid}`);
 
-                alert('Profile picture updated successfully!');
+                alert('Profile picture updated successfully across all your messages!');
                 window.location.reload();
             };
 

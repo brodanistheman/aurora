@@ -85,7 +85,7 @@ function initChat() {
 
                 div.innerHTML = `
                     <img src="${senderPic}" alt="${senderDisplay}'s profile picture" class="chat-profile-pic" style="width: 30px; height: 30px; border-radius: 50%; object-fit: cover; margin-right: 8px; vertical-align: middle;" onerror="this.src='${defaultAvatar}'">
-                    <span>${senderDisplay}${shieldHtml}:</span> ${contentHtml}
+                    <span>${senderDisplay}${shieldHtml}:&nbsp;</span>${contentHtml}
                 `;
                 messageBox.appendChild(div);
             });
