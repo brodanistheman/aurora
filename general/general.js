@@ -1,7 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
 import { getFirestore, doc, getDoc, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
-import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-storage.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyCLKCCpNbCs2AJm7g0JtGIjL43X5hr31N8",
@@ -16,7 +15,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const storage = getStorage(app);
 
 const userInfoElement = document.getElementById('user-info');
 const logoutButton = document.getElementById('logout-button');
@@ -25,10 +23,9 @@ const profileButton = document.getElementById('profile-button');
 const messageBox = document.getElementById('message-box');
 const messageInput = document.getElementById('message-input');
 const sendButton = document.getElementById('send-button');
-const imageInput = document.getElementById('image-input');
-const uploadBtn = document.getElementById('upload-btn');
 
 let currentDisplayName = 'Anonymous';
+let currentProfilePic = '';
 
 const cachedSequentialId = localStorage.getItem('aurora_quick_id');
 if (cachedSequentialId && profileButton) {
@@ -40,6 +37,10 @@ if (cachedSequentialId && profileButton) {
 function applyUserData(userData) {
     if (userData.displayName) {
         currentDisplayName = userData.displayName;
+    }
+
+    if (userData.profilePic) {
+        currentProfilePic = userData.profilePic;
     }
 
     if (userInfoElement) {
@@ -75,6 +76,7 @@ function initChat() {
                 div.className = 'chat-message';
                 
                 const senderDisplay = msg.displayName || 'Anonymous';
+                const senderPic = msg.profilePic || 'default-avatar.png';
                 const isMod = moderatorUids.includes(msg.uid);
                 const shieldHtml = isMod ? `<span class="shield-icon"><i class="fa-solid fa-shield-halved"></i></span>` : '';
                 
@@ -82,11 +84,11 @@ function initChat() {
                 if (msg.text) {
                     contentHtml += `<span>${msg.text}</span>`;
                 }
-                if (msg.imageUrl) {
-                    contentHtml += `<div class="chat-image-container"><img src="${msg.imageUrl}" alt="Uploaded image" style="max-width: 200px; border-radius: 8px; margin-top: 5px;" /></div>`;
-                }
 
-                div.innerHTML = `<span>${senderDisplay}${shieldHtml}:</span> ${contentHtml}`;
+                div.innerHTML = `
+                    <img src="${senderPic}" alt="${senderDisplay}'s profile picture" class="chat-profile-pic" style="width: 30px; height: 30px; border-radius: 50%; object-fit: cover; margin-right: 8px; vertical-align: middle;">
+                    <span>${senderDisplay}${shieldHtml}:</span> ${contentHtml}
+                `;
                 messageBox.appendChild(div);
             });
             messageBox.scrollTop = messageBox.scrollHeight;
@@ -144,30 +146,20 @@ if (settingsButton) {
     });
 }
 
-async function sendChatMessage(text, file) {
+async function sendChatMessage(text) {
     const user = auth.currentUser;
     if (!user) return;
 
     try {
-        let imageUrl = null;
-
-        if (file) {
-            const filePath = `chat_images/${user.uid}_${Date.now()}_${file.name}`;
-            const storageRef = ref(storage, filePath);
-            const snapshot = await uploadBytes(storageRef, file);
-            imageUrl = await getDownloadURL(snapshot.ref);
-        }
-
-        if (text || imageUrl) {
+        if (text) {
             await addDoc(collection(db, "messages"), {
                 uid: user.uid,
                 displayName: currentDisplayName,
-                text: text || '',
-                imageUrl: imageUrl,
+                profilePic: currentProfilePic,
+                text: text,
                 createdAt: serverTimestamp()
             });
             messageInput.value = '';
-            if (imageInput) imageInput.value = '';
         }
     } catch (error) {
         console.error("Error sending message: ", error);
@@ -177,36 +169,15 @@ async function sendChatMessage(text, file) {
 if (sendButton) {
     sendButton.addEventListener('click', () => {
         const text = messageInput.value.trim();
-        sendChatMessage(text, null);
-    });
-}
-
-if (uploadBtn && imageInput) {
-    uploadBtn.addEventListener('click', () => {
-        imageInput.click();
-    });
-
-    imageInput.addEventListener('change', () => {
-        const file = imageInput.files[0];
-        if (file) {
-            const text = messageInput.value.trim();
-            sendChatMessage(text, file);
-        }
+        sendChatMessage(text);
     });
 }
 
 if (messageInput) {
-    messageInput.addEventListener('paste', (event) => {
-        const items = (event.clipboardData || event.originalEvent.clipboardData).items;
-        for (let index in items) {
-            const item = items[index];
-            if (item.kind === 'file' && item.type.startsWith('image/')) {
-                const blob = item.getAsFile();
-                const text = messageInput.value.trim();
-                sendChatMessage(text, blob);
-                event.preventDefault();
-                break;
-            }
+    messageInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            const text = messageInput.value.trim();
+            sendChatMessage(text);
         }
     });
 }

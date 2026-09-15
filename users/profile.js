@@ -30,6 +30,7 @@ function renderProfileData(userData) {
     
     const rawDisplayName = userData.displayName;
     const rawUsername = userData.username;
+    const profilePic = userData.profilePic || 'default-avatar.png';
 
     const displayName = rawDisplayName && validateName(rawDisplayName) ? rawDisplayName : fallbackName;
     const username = rawUsername && validateName(rawUsername) ? rawUsername : fallbackUsername;
@@ -38,6 +39,9 @@ function renderProfileData(userData) {
 
     if (profileContent) {
         profileContent.innerHTML = `
+            <div class="profile-header" style="text-align: center; margin-bottom: 20px;">
+                <img src="${profilePic}" alt="${displayName}'s profile picture" class="profile-avatar" style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; margin-bottom: 10px;">
+            </div>
             <p>Display Name: ${displayName}</p>
             <p>Username: ${username.startsWith('@') ? username : '@' + username}</p>
             <p>Registration ID: #${userData.sequentialId}</p>
