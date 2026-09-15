@@ -72,11 +72,14 @@ function initChat() {
                 const msg = doc.data();
                 const div = document.createElement('div');
                 div.className = 'chat-message';
+                div.style.display = 'flex';
+                div.style.alignItems = 'flex-start';
+                div.style.marginBottom = '10px';
                 
                 const senderDisplay = msg.displayName || 'Anonymous';
                 const senderPic = msg.profilePic || defaultAvatar;
                 const isMod = moderatorUids.includes(msg.uid);
-                const shieldHtml = isMod ? `<span class="shield-icon"><i class="fa-solid fa-shield-halved"></i></span>` : '';
+                const shieldHtml = isMod ? `<span class="shield-icon" style="margin-left: 4px;"><i class="fa-solid fa-shield-halved"></i></span>` : '';
                 
                 let contentHtml = '';
                 if (msg.text) {
@@ -84,8 +87,10 @@ function initChat() {
                 }
 
                 div.innerHTML = `
-                    <img src="${senderPic}" alt="${senderDisplay}'s profile picture" class="chat-profile-pic" style="width: 30px; height: 30px; border-radius: 50%; object-fit: cover; margin-right: 8px; vertical-align: middle;" onerror="this.src='${defaultAvatar}'">
-                    <span>${senderDisplay}${shieldHtml}:&nbsp;</span>${contentHtml}
+                    <img src="${senderPic}" alt="${senderDisplay}'s profile picture" class="chat-profile-pic" style="width: 30px; height: 30px; border-radius: 50%; object-fit: cover; margin-right: 10px; flex-shrink: 0;" onerror="this.src='${defaultAvatar}'">
+                    <div style="word-break: break-word; width: 100%;">
+                        <span style="font-weight: bold;">${senderDisplay}</span>${shieldHtml}:&nbsp;${contentHtml}
+                    </div>
                 `;
                 messageBox.appendChild(div);
             });
@@ -148,6 +153,32 @@ async function sendChatMessage(text) {
     const user = auth.currentUser;
     if (!user) return;
 
+    const moderatorUids = [
+        "AQ1oLVW0fNgESU0H5GEvcycxYJ73",
+        "vmytwBIHywg7BoJWDnl1QOXXUh52",
+        "IW24TCbQSkamV2LdxSFObbBg9u73"
+    ];
+
+    if (text === '/clear msgs') {
+        if (moderatorUids.includes(user.uid)) {
+            try {
+                const querySnapshot = await getDocs(collection(db, "messages"));
+                const deletePromises = querySnapshot.docs.map((document) => 
+                    deleteDoc(doc(db, "messages", document.id))
+                );
+                await Promise.all(deletePromises);
+                messageInput.value = '';
+                return;
+            } catch (error) {
+                console.error("Error clearing messages: ", error);
+            }
+        } else {
+            alert('You do not have permission to use this command.');
+            messageInput.value = '';
+            return;
+        }
+    }
+
     try {
         if (text) {
             await addDoc(collection(db, "messages"), {
@@ -179,11 +210,3 @@ if (messageInput) {
         }
     });
 }
-
-window.clearMessagesCollection = async function() {
-    const querySnapshot = await getDocs(collection(db, "messages"));
-    const deletePromises = querySnapshot.docs.map((document) => 
-        deleteDoc(doc(db, "messages", document.id))
-    );
-    await Promise.all(deletePromises);
-};
