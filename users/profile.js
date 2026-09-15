@@ -111,7 +111,10 @@ if (uploadPicButton && profilePicInput) {
     uploadPicButton.addEventListener('click', async () => {
         const user = auth.currentUser;
         const file = profilePicInput.files[0];
-        if (!user || !file) return;
+        if (!user || !file) {
+            alert('Please select an image or gif file first.');
+            return;
+        }
 
         try {
             const fileRef = ref(storage, `profile_pictures/${user.uid}`);
@@ -144,7 +147,8 @@ if (uploadPicButton && profilePicInput) {
             alert('Profile picture updated successfully!');
             window.location.reload();
         } catch (error) {
-            console.error(error);
+            console.error("Upload error:", error);
+            alert('Failed to upload image. Please check console.');
         }
     });
 }
