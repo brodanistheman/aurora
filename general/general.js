@@ -27,6 +27,8 @@ const sendButton = document.getElementById('send-button');
 let currentDisplayName = 'Anonymous';
 let currentProfilePic = '';
 
+const defaultAvatar = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23cccccc'><path d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z'/></svg>";
+
 const cachedSequentialId = localStorage.getItem('aurora_quick_id');
 if (cachedSequentialId && profileButton) {
     profileButton.onclick = () => {
@@ -39,9 +41,7 @@ function applyUserData(userData) {
         currentDisplayName = userData.displayName;
     }
 
-    if (userData.profilePic) {
-        currentProfilePic = userData.profilePic;
-    }
+    currentProfilePic = userData.profilePic || defaultAvatar;
 
     if (userInfoElement) {
         userInfoElement.innerHTML = `
@@ -74,7 +74,7 @@ function initChat() {
                 div.className = 'chat-message';
                 
                 const senderDisplay = msg.displayName || 'Anonymous';
-                const senderPic = msg.profilePic || 'default-avatar.png';
+                const senderPic = msg.profilePic || defaultAvatar;
                 const isMod = moderatorUids.includes(msg.uid);
                 const shieldHtml = isMod ? `<span class="shield-icon"><i class="fa-solid fa-shield-halved"></i></span>` : '';
                 
@@ -84,7 +84,7 @@ function initChat() {
                 }
 
                 div.innerHTML = `
-                    <img src="${senderPic}" alt="${senderDisplay}'s profile picture" class="chat-profile-pic" style="width: 30px; height: 30px; border-radius: 50%; object-fit: cover; margin-right: 8px; vertical-align: middle;">
+                    <img src="${senderPic}" alt="${senderDisplay}'s profile picture" class="chat-profile-pic" style="width: 30px; height: 30px; border-radius: 50%; object-fit: cover; margin-right: 8px; vertical-align: middle;" onerror="this.src='${defaultAvatar}'">
                     <span>${senderDisplay}${shieldHtml}:</span> ${contentHtml}
                 `;
                 messageBox.appendChild(div);
@@ -186,5 +186,4 @@ window.clearMessagesCollection = async function() {
         deleteDoc(doc(db, "messages", document.id))
     );
     await Promise.all(deletePromises);
-    console.log("All messages deleted successfully!");
 };
