@@ -32,9 +32,6 @@ html, body {
     gap: 15px;
     min-width: 220px;
     max-width: 300px;
-    background: #1e1e1e;
-    padding: 20px;
-    border-radius: 8px;
 }
 
 .chat-panel {
@@ -69,7 +66,7 @@ html, body {
     align-items: center;
 }
 
-.chat-input-group input[type="text"] {
+.chat-input-group input {
     flex: 1;
     height: 48px;
     padding: 0 14px;
@@ -79,15 +76,13 @@ html, body {
     outline: none;
     margin-bottom: 0;
     border-radius: 4px;
-    background: #ffffff;
-    color: #111111;
 }
 
-.chat-input-group input[type="text"]:focus {
+.chat-input-group input:focus {
     border-color: #111111;
 }
 
-#send-button {
+.chat-input-group button {
     height: 48px;
     width: 90px;
     padding: 0;
@@ -103,30 +98,8 @@ html, body {
     border-radius: 4px;
 }
 
-#send-button:hover {
+.chat-input-group button:hover {
     background-color: #333333;
-}
-
-#upload-btn {
-    width: 48px;
-    height: 48px;
-    padding: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    cursor: pointer;
-    box-sizing: border-box;
-    margin-top: 0;
-    background-color: #f1f1f1;
-    color: #111111;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    font-size: 16px;
-}
-
-#upload-btn:hover {
-    background-color: #e0e0e0;
 }
 
 .chat-message {
@@ -134,7 +107,6 @@ html, body {
     padding: 8px 12px;
     word-break: break-word;
     border-radius: 6px;
-    max-width: 70%;
 }
 
 .chat-message span {
@@ -148,13 +120,6 @@ html, body {
     margin-left: 4px;
     display: inline-flex;
     align-items: center;
-}
-
-.chat-image-container img {
-    max-width: 200px;
-    border-radius: 8px;
-    margin-top: 5px;
-    display: block;
 }
 
 .login-container {
@@ -214,7 +179,7 @@ button:hover {
     margin-bottom: 24px;
     font-size: 14px;
     line-height: 1.6;
-    color: #cccccc;
+    color: #333333;
 }
 
 .auth-tabs {
