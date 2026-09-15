@@ -45,9 +45,7 @@ function applyUserData(userData) {
 
     if (userInfoElement) {
         userInfoElement.innerHTML = `
-            <p>Email: ${userData.email}</p>
             <p>Registration ID: #${userData.sequentialId}</p>
-            <p>IP Address: ${userData.ipAddress}</p>
         `;
     }
 

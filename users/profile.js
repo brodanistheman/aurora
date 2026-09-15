@@ -1,5 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
-import { getFirestore, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
+import { getFirestore, collection, query, where, getDocs, doc, updateDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-storage.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyCLKCCpNbCs2AJm7g0JtGIjL43X5hr31N8",
@@ -12,9 +14,14 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
 const db = getFirestore(app);
+const storage = getStorage(app);
 
 const profileContent = document.getElementById('profile-content');
+const uploadSection = document.getElementById('upload-section');
+const profilePicInput = document.getElementById('profile-pic-input');
+const uploadPicButton = document.getElementById('upload-pic-button');
 
 const urlParams = new URLSearchParams(window.location.search);
 const targetSequentialId = urlParams.get('id') || window.__AURORA_USER_ID__;
@@ -24,7 +31,7 @@ function validateName(value) {
     return regex.test(value);
 }
 
-function renderProfileData(userData) {
+function renderProfileData(userData, isOwner) {
     const fallbackName = `aurora_user_${targetSequentialId}`;
     const fallbackUsername = `@aurora_user_${targetSequentialId}`;
     
@@ -47,6 +54,10 @@ function renderProfileData(userData) {
             <p>Registration ID: #${userData.sequentialId}</p>
         `;
     }
+
+    if (uploadSection && isOwner) {
+        uploadSection.style.display = 'block';
+    }
 }
 
 async function loadProfile() {
@@ -59,8 +70,15 @@ async function loadProfile() {
     const cacheKey = `aurora_profile_${targetSequentialId}`;
     const cachedData = localStorage.getItem(cacheKey);
 
+    let currentUserUid = null;
+    if (auth.currentUser) {
+        currentUserUid = auth.currentUser.uid;
+    }
+
     if (cachedData) {
-        renderProfileData(JSON.parse(cachedData));
+        const parsed = JSON.parse(cachedData);
+        const isOwner = currentUserUid && parsed.uid === currentUserUid;
+        renderProfileData(parsed, isOwner);
     }
 
     try {
@@ -69,9 +87,13 @@ async function loadProfile() {
         const querySnapshot = await getDocs(q);
 
         if (!querySnapshot.empty) {
-            const userData = querySnapshot.docs[0].data();
+            const userDocSnap = querySnapshot.docs[0];
+            const userData = userDocSnap.data();
+            userData.uid = userDocSnap.id;
             localStorage.setItem(cacheKey, JSON.stringify(userData));
-            renderProfileData(userData);
+            
+            const isOwner = auth.currentUser && auth.currentUser.uid === userDocSnap.id;
+            renderProfileData(userData, isOwner);
         } else if (!cachedData) {
             if (profileContent) profileContent.textContent = "User not found.";
             document.title = "User Not Found - Aurora";
@@ -84,4 +106,47 @@ async function loadProfile() {
     }
 }
 
-loadProfile();
+if (uploadPicButton && profilePicInput) {
+    uploadPicButton.addEventListener('click', async () => {
+        const user = auth.currentUser;
+        const file = profilePicInput.files[0];
+        if (!user || !file) return;
+
+        try {
+            const fileRef = ref(storage, `profile_pictures/${user.uid}`);
+            await uploadBytes(fileRef, file);
+            const downloadUrl = await getDownloadURL(fileRef);
+
+            const userRef = doc(db, "users", user.uid);
+            await updateDoc(userRef, {
+                profilePic: downloadUrl
+            });
+
+            const cacheKey = `aurora_profile_${targetSequentialId}`;
+            const cachedData = localStorage.getItem(cacheKey);
+            if (cachedData) {
+                const parsed = JSON.parse(cachedData);
+                parsed.profilePic = downloadUrl;
+                localStorage.setItem(cacheKey, JSON.stringify(parsed));
+                renderProfileData(parsed, true);
+            }
+
+            const userCacheKey = `aurora_user_cache_${user.uid}`;
+            const userCachedData = localStorage.getItem(userCacheKey);
+            if (userCachedData) {
+                const parsedUser = JSON.parse(userCachedData);
+                parsedUser.profilePic = downloadUrl;
+                localStorage.setItem(userCacheKey, JSON.stringify(parsedUser));
+            }
+
+            profilePicInput.value = '';
+            alert('Profile picture updated successfully!');
+        } catch (error) {
+            console.error(error);
+        }
+    });
+}
+
+onAuthStateChanged(auth, (user) => {
+    loadProfile();
+});
