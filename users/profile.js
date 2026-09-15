@@ -47,7 +47,7 @@ function renderProfileData(userData, isOwner) {
     if (profileContent) {
         profileContent.innerHTML = `
             <div class="profile-header" style="text-align: center; margin-bottom: 20px;">
-                <img src="${profilePic}" alt="${displayName}'s profile picture" class="profile-avatar" style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; margin-bottom: 10px;">
+                <img src="${profilePic}" alt="${displayName}'s profile picture" class="profile-avatar" style="width: 100px; height: 100px; min-width: 100px; min-height: 100px; border-radius: 50%; object-fit: cover; margin-bottom: 10px; display: inline-block;">
             </div>
             <p>Display Name: ${displayName}</p>
             <p>Username: ${username.startsWith('@') ? username : '@' + username}</p>
