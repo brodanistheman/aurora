@@ -73,8 +73,9 @@ function initChat() {
                 const div = document.createElement('div');
                 div.className = 'chat-message';
                 div.style.display = 'flex';
-                div.style.alignItems = 'flex-start';
-                div.style.marginBottom = '10px';
+                div.style.alignItems = 'center';
+                div.style.padding = '8px';
+                div.style.marginBottom = '4px';
                 
                 const senderDisplay = msg.displayName || 'Anonymous';
                 const senderPic = msg.profilePic || defaultAvatar;
@@ -88,8 +89,8 @@ function initChat() {
 
                 div.innerHTML = `
                     <img src="${senderPic}" alt="${senderDisplay}'s profile picture" class="chat-profile-pic" style="width: 30px; height: 30px; border-radius: 50%; object-fit: cover; margin-right: 10px; flex-shrink: 0;" onerror="this.src='${defaultAvatar}'">
-                    <div style="word-break: break-word; width: 100%;">
-                        <span style="font-weight: bold;">${senderDisplay}</span>${shieldHtml}:&nbsp;${contentHtml}
+                    <div style="word-break: break-word; width: 100%; display: flex; align-items: center; flex-wrap: wrap;">
+                        <span style="font-weight: bold; margin-right: 4px;">${senderDisplay}${shieldHtml}:</span>&nbsp;${contentHtml}
                     </div>
                 `;
                 messageBox.appendChild(div);
