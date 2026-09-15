@@ -22,7 +22,9 @@
         <div class="chat-panel">
             <div id="message-box"></div>
             <div class="chat-input-group">
-                <input type="text" id="message-input" placeholder="Type a message..." />
+                <input type="file" id="image-input" accept="image/*" style="display: none;" />
+                <button id="upload-btn" type="button"><i class="fa-solid fa-image"></i></button>
+                <input type="text" id="message-input" placeholder="Type a message or paste an image..." />
                 <button id="send-button" type="button">Send</button>
             </div>
         </div>
