@@ -107,11 +107,25 @@ html, body {
     padding: 8px 12px;
     word-break: break-word;
     border-radius: 6px;
+    display: flex;
+    align-items: center;
 }
 
 .chat-message span {
     font-weight: bold;
     color: #333;
+}
+
+.chat-profile-pic {
+    width: 30px;
+    height: 30px;
+    min-width: 30px;
+    min-height: 30px;
+    aspect-ratio: 1 / 1;
+    border-radius: 50%;
+    object-fit: cover;
+    margin-right: 8px;
+    display: inline-block;
 }
 
 .chat-message .shield-icon {
