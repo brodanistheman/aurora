@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, runTransaction, setDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, runTransaction, setDoc, collection, query, orderBy, limit, getDocs } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyCLKCCpNbCs2AJm7g0JtGIjL43X5hr31N8",
@@ -76,4 +76,23 @@ if (loginForm) {
             }
         }
     });
+}
+
+async function loadRecentMessages() {
+    try {
+        const messagesRef = collection(db, "messages");
+        const q = query(messagesRef, orderBy("timestamp", "desc"), limit(25));
+        const querySnapshot = await getDocs(q);
+        const messages = [];
+        
+        querySnapshot.forEach((doc) => {
+            messages.push({ id: doc.id, ...doc.data() });
+        });
+
+        messages.reverse();
+        renderMessages(messages);
+        
+    } catch (error) {
+        console.error("Error loading messages: ", error);
+    }
 }

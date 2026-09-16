@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyCLKCCpNbCs2AJm7g0JtGIjL43X5hr31N8",
@@ -57,7 +57,7 @@ function applyUserData(userData) {
 }
 
 function initChat() {
-    const q = query(collection(db, "messages"), orderBy("createdAt", "asc"));
+    const q = query(collection(db, "messages"), orderBy("createdAt", "desc"), limit(30));
 
     const moderatorUids = [
         "AQ1oLVW0fNgESU0H5GEvcycxYJ73",
@@ -68,8 +68,13 @@ function initChat() {
     onSnapshot(q, (snapshot) => {
         if (messageBox) {
             messageBox.innerHTML = '';
+            
+            const docsToRender = [];
             snapshot.forEach((doc) => {
-                const msg = doc.data();
+                docsToRender.push(doc.data());
+            });
+
+            docsToRender.reverse().forEach((msg) => {
                 const div = document.createElement('div');
                 div.className = 'chat-message';
                 div.style.display = 'flex';
@@ -95,6 +100,7 @@ function initChat() {
                 `;
                 messageBox.appendChild(div);
             });
+            
             messageBox.scrollTop = messageBox.scrollHeight;
         }
     });
