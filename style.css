@@ -238,3 +238,73 @@ button:hover {
     flex-direction: column;
     gap: 8px;
 }
+
+.dashboard-container {
+    max-width: 600px;
+    margin: 40px auto;
+    padding: 30px;
+    background: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.profile-header {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.profile-avatar {
+    width: 100px;
+    height: 100px;
+    aspect-ratio: 1 / 1;
+    border-radius: 50%;
+    object-fit: cover;
+    margin-bottom: 10px;
+    display: inline-block;
+}
+
+.upload-section {
+    margin-top: 20px;
+    border-top: 1px solid #ddd;
+    padding-top: 15px;
+}
+
+.upload-actions {
+    margin-top: 16px;
+}
+
+.hidden {
+    display: none;
+}
+
+.upload-preview {
+    margin: 10px 0;
+}
+
+.upload-preview img {
+    max-width: 120px;
+    max-height: 120px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+    object-fit: cover;
+}
+
+.upload-status {
+    font-size: 13px;
+    color: #333333;
+    margin: 8px 0;
+    min-height: 18px;
+}
+
+.upload-status.error {
+    color: #b00020;
+}
+
+label[for="profile-pic-input"] {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 6px;
+    color: #333333;
+}

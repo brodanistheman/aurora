@@ -8,20 +8,25 @@
     <link rel="stylesheet" href="../../style.css">
 </head>
 <body>
-    <div class="dashboard-container">
+    <main class="dashboard-container">
         <h1>User Profile</h1>
-        <div id="profile-content">Loading profile...</div>
-        
-        <div id="upload-section" style="display: none; margin-top: 20px; border-top: 1px solid #ddd; padding-top: 15px;">
+        <div id="profile-content" aria-live="polite">Loading profile...</div>
+
+        <div id="upload-section" class="upload-section hidden">
             <h3>Update Profile Picture</h3>
-            <input type="file" id="profile-pic-input" accept="image/png, image/jpeg" style="margin-bottom: 10px;">
+            <label for="profile-pic-input">Choose an image</label>
+            <input type="file" id="profile-pic-input" accept="image/png, image/jpeg">
+            <div id="upload-preview" class="upload-preview hidden">
+                <img id="upload-preview-img" alt="Selected profile picture preview">
+            </div>
+            <div id="upload-status" class="upload-status" aria-live="polite"></div>
             <button id="upload-pic-button" type="button">Upload Image</button>
         </div>
 
-        <div class="button-group" style="margin-top: 16px;">
-            <button onclick="window.history.back()">Back</button>
+        <div class="button-group upload-actions">
+            <button id="back-button" type="button">Back</button>
         </div>
-    </div>
+    </main>
 
     <script type="module" src="../profile.js"></script>
 </body>
