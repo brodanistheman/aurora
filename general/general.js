@@ -14,10 +14,11 @@ const firebaseConfig = {
 
 // NOTE: This client config being public is normal for Firebase — actual access
 // control (who can read/write/delete which documents) must be enforced with
-// Firestore Security Rules on the server side. The moderator check below is a
-// UX convenience only; it does NOT stop someone from calling the SDK directly.
-// Make sure your Firestore rules restrict deletes on "messages" to the same
-// moderator UIDs, or this command is only cosmetically protected.
+// Firestore Security Rules on the server side. The moderator checks below (for
+// /clear msgs and /rainbow) are a UX convenience only; they do NOT stop someone
+// from calling the SDK directly. Make sure your Firestore rules restrict writes
+// to "settings/global" and deletes on "messages" to the same moderator UIDs,
+// or these commands are only cosmetically protected.
 const MODERATOR_UIDS = [
     "AQ1oLVW0fNgESU0H5GEvcycxYJ73",
     "vmytwBIHywg7BoJWDnl1QOXXUh52",
@@ -31,6 +32,7 @@ const SCROLL_NEAR_BOTTOM_PX = 80;
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+const RAINBOW_DOC_REF = doc(db, "settings", "global");
 
 const userInfoElement = document.getElementById('user-info');
 const logoutButton = document.getElementById('logout-button');
@@ -183,6 +185,25 @@ function initOnlineUsersList() {
     });
 }
 
+// ---------- rainbow mode (global, moderator-toggleable) ----------
+
+function applyRainbowMode(enabled) {
+    document.body.classList.toggle('rainbow-mode', !!enabled);
+}
+
+function listenForRainbowMode() {
+    onSnapshot(RAINBOW_DOC_REF, (snap) => {
+        const data = snap.data();
+        applyRainbowMode(data && data.rainbowMode);
+    });
+}
+
+async function toggleRainbowMode() {
+    const snap = await getDoc(RAINBOW_DOC_REF);
+    const current = !!(snap.exists() && snap.data().rainbowMode);
+    await setDoc(RAINBOW_DOC_REF, { rainbowMode: !current }, { merge: true });
+}
+
 // ---------- lightbox ----------
 
 function openLightbox(imgSrc) {
@@ -271,22 +292,33 @@ function initChat() {
     });
 }
 
+async function clearAllMessages() {
+    const querySnapshot = await getDocs(collection(db, "messages"));
+    await Promise.all(querySnapshot.docs.map((d) => deleteDoc(doc(db, "messages", d.id))));
+}
+
+// Moderator-only chat commands, keyed by the exact (lowercased) command text.
+const MODERATOR_COMMANDS = {
+    '/clear msgs': clearAllMessages,
+    '/rainbow': toggleRainbowMode
+};
+
 async function sendChatMessage(text, imageUrl = null) {
     const user = auth.currentUser;
     if (!user) return;
 
-    if (text === '/clear msgs') {
-        if (MODERATOR_UIDS.includes(user.uid)) {
-            try {
-                const querySnapshot = await getDocs(collection(db, "messages"));
-                await Promise.all(querySnapshot.docs.map((d) => deleteDoc(doc(db, "messages", d.id))));
-            } catch (error) {
-                console.error("Error clearing messages: ", error);
-            } finally {
-                messageInput.value = '';
-            }
-        } else {
+    const command = text ? MODERATOR_COMMANDS[text.trim().toLowerCase()] : null;
+    if (command) {
+        if (!MODERATOR_UIDS.includes(user.uid)) {
             alert('You do not have permission to use this command.');
+            messageInput.value = '';
+            return;
+        }
+        try {
+            await command();
+        } catch (error) {
+            console.error("Error running command: ", error);
+        } finally {
             messageInput.value = '';
         }
         return;
@@ -421,6 +453,7 @@ onAuthStateChanged(auth, async (user) => {
         setupPresence(user);
         initOnlineUsersList();
         initChat();
+        listenForRainbowMode();
     } else {
         localStorage.removeItem('aurora_quick_id');
         window.location.href = '../';

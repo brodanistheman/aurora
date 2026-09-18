@@ -28,6 +28,15 @@ html, body {
     }
 }
 
+@keyframes rainbow-cycle {
+    from { filter: hue-rotate(0deg); }
+    to { filter: hue-rotate(360deg); }
+}
+
+body.rainbow-mode {
+    animation: rainbow-cycle 4s linear infinite;
+}
+
 :focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
