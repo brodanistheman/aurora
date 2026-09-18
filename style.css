@@ -2,7 +2,6 @@
 
 :root {
     --accent: #4f46e5;
-    --accent-soft: #eef0fd;
 }
 
 * {
@@ -26,15 +25,6 @@ html, body {
         transition: none !important;
         animation: none !important;
     }
-}
-
-@keyframes rainbow-cycle {
-    from { filter: hue-rotate(0deg); }
-    to { filter: hue-rotate(360deg); }
-}
-
-body.rainbow-mode {
-    animation: rainbow-cycle 4s linear infinite;
 }
 
 :focus-visible {
@@ -208,18 +198,6 @@ body.rainbow-mode {
     font-weight: 600;
     font-size: 13.5px;
     color: #111111;
-}
-
-.chat-message .shield-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
-    background: var(--accent-soft);
-    color: var(--accent);
-    font-size: 0.65rem;
 }
 
 .chat-message-body {

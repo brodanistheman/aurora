@@ -14,11 +14,11 @@ const firebaseConfig = {
 
 // NOTE: This client config being public is normal for Firebase — actual access
 // control (who can read/write/delete which documents) must be enforced with
-// Firestore Security Rules on the server side. The moderator checks below (for
-// /clear msgs and /rainbow) are a UX convenience only; they do NOT stop someone
-// from calling the SDK directly. Make sure your Firestore rules restrict writes
-// to "settings/global" and deletes on "messages" to the same moderator UIDs,
-// or these commands are only cosmetically protected.
+// Firestore Security Rules on the server side. The moderator check below (for
+// /clear msgs) is a UX convenience only; it does NOT stop someone from calling
+// the SDK directly. Make sure your Firestore rules restrict deletes on
+// "messages" to the same moderator UIDs, or this command is only cosmetically
+// protected.
 const MODERATOR_UIDS = [
     "AQ1oLVW0fNgESU0H5GEvcycxYJ73",
     "vmytwBIHywg7BoJWDnl1QOXXUh52",
@@ -32,7 +32,6 @@ const SCROLL_NEAR_BOTTOM_PX = 80;
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const RAINBOW_DOC_REF = doc(db, "settings", "global");
 
 const userInfoElement = document.getElementById('user-info');
 const logoutButton = document.getElementById('logout-button');
@@ -185,25 +184,6 @@ function initOnlineUsersList() {
     });
 }
 
-// ---------- rainbow mode (global, moderator-toggleable) ----------
-
-function applyRainbowMode(enabled) {
-    document.body.classList.toggle('rainbow-mode', !!enabled);
-}
-
-function listenForRainbowMode() {
-    onSnapshot(RAINBOW_DOC_REF, (snap) => {
-        const data = snap.data();
-        applyRainbowMode(data && data.rainbowMode);
-    });
-}
-
-async function toggleRainbowMode() {
-    const snap = await getDoc(RAINBOW_DOC_REF);
-    const current = !!(snap.exists() && snap.data().rainbowMode);
-    await setDoc(RAINBOW_DOC_REF, { rainbowMode: !current }, { merge: true });
-}
-
 // ---------- lightbox ----------
 
 function openLightbox(imgSrc) {
@@ -259,8 +239,6 @@ function initChat() {
 
             const senderDisplay = escapeHtml(msg.displayName || 'Anonymous');
             const senderPic = isSafeImageSrc(msg.profilePic) ? msg.profilePic : defaultAvatar;
-            const isMod = MODERATOR_UIDS.includes(msg.uid);
-            const shieldHtml = isMod ? `<span class="shield-icon" title="Moderator"><i class="fa-solid fa-shield-halved"></i></span>` : '';
 
             let contentHtml = '';
             if (msg.text) {
@@ -274,7 +252,7 @@ function initChat() {
                 <img src="${senderPic}" alt="" class="chat-profile-pic" onerror="this.src='${defaultAvatar}'">
                 <div class="chat-message-content">
                     <div class="chat-message-header">
-                        <span class="chat-sender-name">${senderDisplay}</span>${shieldHtml}
+                        <span class="chat-sender-name">${senderDisplay}</span>
                     </div>
                     <div class="chat-message-body">${contentHtml}</div>
                 </div>
@@ -299,8 +277,7 @@ async function clearAllMessages() {
 
 // Moderator-only chat commands, keyed by the exact (lowercased) command text.
 const MODERATOR_COMMANDS = {
-    '/clear msgs': clearAllMessages,
-    '/rainbow': toggleRainbowMode
+    '/clear msgs': clearAllMessages
 };
 
 async function sendChatMessage(text, imageUrl = null) {
@@ -453,7 +430,6 @@ onAuthStateChanged(auth, async (user) => {
         setupPresence(user);
         initOnlineUsersList();
         initChat();
-        listenForRainbowMode();
     } else {
         localStorage.removeItem('aurora_quick_id');
         window.location.href = '../';
