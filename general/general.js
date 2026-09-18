@@ -80,16 +80,6 @@ function formatMessageText(text) {
     });
 }
 
-function formatTimestamp(createdAt) {
-    if (!createdAt || typeof createdAt.toDate !== 'function') return '';
-    const date = createdAt.toDate();
-    const now = new Date();
-    const sameDay = date.toDateString() === now.toDateString();
-    const time = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-    if (sameDay) return time;
-    return `${date.toLocaleDateString([], { month: 'short', day: 'numeric' })} · ${time}`;
-}
-
 function setStatus(el, message, isError = false) {
     if (!el) return;
     el.textContent = message || '';
@@ -250,7 +240,6 @@ function initChat() {
             const senderPic = isSafeImageSrc(msg.profilePic) ? msg.profilePic : defaultAvatar;
             const isMod = MODERATOR_UIDS.includes(msg.uid);
             const shieldHtml = isMod ? `<span class="shield-icon" title="Moderator"><i class="fa-solid fa-shield-halved"></i></span>` : '';
-            const timeHtml = formatTimestamp(msg.createdAt) ? `<span class="chat-timestamp">${formatTimestamp(msg.createdAt)}</span>` : '';
 
             let contentHtml = '';
             if (msg.text) {
@@ -264,7 +253,7 @@ function initChat() {
                 <img src="${senderPic}" alt="" class="chat-profile-pic" onerror="this.src='${defaultAvatar}'">
                 <div class="chat-message-content">
                     <div class="chat-message-header">
-                        <span class="chat-sender-name">${senderDisplay}</span>${shieldHtml}${timeHtml}
+                        <span class="chat-sender-name">${senderDisplay}</span>${shieldHtml}
                     </div>
                     <div class="chat-message-body">${contentHtml}</div>
                 </div>
