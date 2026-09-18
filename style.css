@@ -16,6 +16,18 @@ html, body {
     color: #111111;
 }
 
+@media (prefers-reduced-motion: reduce) {
+    * {
+        transition: none !important;
+        animation: none !important;
+    }
+}
+
+:focus-visible {
+    outline: 2px solid #111111;
+    outline-offset: 2px;
+}
+
 .dashboard-layout {
     display: flex;
     width: 100vw;
@@ -58,6 +70,24 @@ html, body {
     flex-direction: column;
     gap: 8px;
     border-radius: 4px;
+    scrollbar-width: thin;
+    scrollbar-color: #cccccc #fafafa;
+}
+
+#message-box::-webkit-scrollbar {
+    width: 8px;
+}
+
+#message-box::-webkit-scrollbar-thumb {
+    background-color: #cccccc;
+    border-radius: 8px;
+}
+
+.empty-state {
+    margin: auto;
+    color: #888888;
+    font-size: 14px;
+    text-align: center;
 }
 
 .chat-input-group {
@@ -96,10 +126,27 @@ html, body {
     font-weight: 500;
     font-size: 14px;
     border-radius: 4px;
+    transition: background-color 0.15s ease, opacity 0.15s ease;
 }
 
 .chat-input-group button:hover {
     background-color: #333333;
+}
+
+.chat-input-group button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.attach-button {
+    width: 48px !important;
+    background-color: #e0e0e0 !important;
+    color: #111111 !important;
+    border: 1px solid #cccccc !important;
+}
+
+.attach-button:hover {
+    background-color: #d5d5d5 !important;
 }
 
 .chat-message {
@@ -109,6 +156,7 @@ html, body {
     border-radius: 6px;
     display: flex;
     align-items: center;
+    transition: background-color 0.15s ease;
 }
 
 .chat-profile-pic {
@@ -133,12 +181,23 @@ html, body {
 .chat-message-header {
     display: inline-flex;
     align-items: center;
+    gap: 6px;
     margin-right: 6px;
 }
 
 .chat-sender-name {
     font-weight: bold;
     color: #333;
+}
+
+.chat-sender-name::after {
+    content: ':';
+}
+
+.chat-timestamp {
+    font-size: 11px;
+    color: #999999;
+    font-weight: 400;
 }
 
 .chat-message-body {
@@ -148,7 +207,6 @@ html, body {
 .chat-message .shield-icon {
     font-size: 0.85rem;
     color: #333;
-    margin-left: 4px;
     display: inline-flex;
     align-items: center;
 }
@@ -208,6 +266,16 @@ html, body {
     font-size: 32px;
     font-weight: bold;
     cursor: pointer;
+    background: none;
+    border: none;
+    width: auto;
+    padding: 0;
+    margin: 0;
+}
+
+.image-modal-close:hover {
+    background: none;
+    color: #dddddd;
 }
 
 .login-container {
@@ -257,6 +325,7 @@ button {
     cursor: pointer;
     margin-top: 8px;
     border-radius: 4px;
+    transition: background-color 0.15s ease;
 }
 
 button:hover {
@@ -410,6 +479,12 @@ label[for="profile-pic-input"] {
     padding-right: 4px;
 }
 
+.active-users-list .empty-state {
+    margin: 4px 0;
+    font-size: 12px;
+    text-align: left;
+}
+
 .active-user-item {
     display: flex;
     align-items: center;
@@ -467,4 +542,51 @@ label[for="profile-pic-input"] {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* Responsive: stack sidebar above chat on narrow viewports */
+@media (max-width: 720px) {
+    .dashboard-layout {
+        flex-direction: column;
+        height: auto;
+        min-height: 100vh;
+        padding: 12px;
+        gap: 12px;
+    }
+
+    .sidebar {
+        max-width: none;
+        min-width: 0;
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    .sidebar h1 {
+        margin-bottom: 0;
+        margin-right: auto;
+    }
+
+    #user-info {
+        width: 100%;
+        margin-bottom: 8px;
+    }
+
+    .button-group {
+        flex-direction: row;
+        flex: 1;
+    }
+
+    .button-group button {
+        margin-top: 0;
+    }
+
+    .active-users-card {
+        width: 100%;
+        margin-top: 0;
+    }
+
+    .chat-panel {
+        height: 70vh;
+    }
 }

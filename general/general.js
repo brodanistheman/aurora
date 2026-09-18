@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp, getDocs, deleteDoc, Timestamp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyCLKCCpNbCs2AJm7g0JtGIjL43X5hr31N8",
@@ -12,6 +12,22 @@ const firebaseConfig = {
     measurementId: "G-3XVQTC189X"
 };
 
+// NOTE: This client config being public is normal for Firebase — actual access
+// control (who can read/write/delete which documents) must be enforced with
+// Firestore Security Rules on the server side. The moderator check below is a
+// UX convenience only; it does NOT stop someone from calling the SDK directly.
+// Make sure your Firestore rules restrict deletes on "messages" to the same
+// moderator UIDs, or this command is only cosmetically protected.
+const MODERATOR_UIDS = [
+    "AQ1oLVW0fNgESU0H5GEvcycxYJ73",
+    "vmytwBIHywg7BoJWDnl1QOXXUh52",
+    "IW24TCbQSkamV2LdxSFObbBg9u73",
+    "FhWBbA6JlwXRPl39vvTjdFR6UaH2"
+];
+
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB
+const SCROLL_NEAR_BOTTOM_PX = 80;
+
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -21,41 +37,92 @@ const logoutButton = document.getElementById('logout-button');
 const settingsButton = document.getElementById('settings-button');
 const profileButton = document.getElementById('profile-button');
 const messageBox = document.getElementById('message-box');
+const messageForm = document.getElementById('message-form');
 const messageInput = document.getElementById('message-input');
 const sendButton = document.getElementById('send-button');
+const imageInput = document.getElementById('image-file-input');
+const attachButton = document.getElementById('attach-button');
+const onlineUsersList = document.getElementById('online-users-list');
+const imageModal = document.getElementById('image-modal');
+const imageModalImg = document.getElementById('image-modal-img');
+const imageModalClose = document.getElementById('image-modal-close');
+
+const defaultAvatar = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23cccccc'><path d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z'/></svg>";
 
 let currentDisplayName = 'Anonymous';
 let currentProfilePic = '';
 let presenceInterval = null;
 
-const defaultAvatar = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23cccccc'><path d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z'/></svg>";
+// ---------- helpers ----------
 
-const cachedSequentialId = localStorage.getItem('aurora_quick_id');
-if (cachedSequentialId && profileButton) {
-    profileButton.onclick = () => {
-        window.location.href = `/aurora/users/${cachedSequentialId}/profile/`;
-    };
+function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
 }
+
+function isSafeImageSrc(src) {
+    if (!src) return false;
+    return src.startsWith('data:image/') || src.startsWith('https://') || src.startsWith('http://');
+}
+
+function formatMessageText(text) {
+    if (!text) return '';
+    const escaped = escapeHtml(text);
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    return escaped.replace(urlRegex, (url) => {
+        const safeUrl = escapeHtml(url);
+        return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeUrl}</a>`;
+    });
+}
+
+function formatTimestamp(createdAt) {
+    if (!createdAt || typeof createdAt.toDate !== 'function') return '';
+    const date = createdAt.toDate();
+    const now = new Date();
+    const sameDay = date.toDateString() === now.toDateString();
+    const time = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    if (sameDay) return time;
+    return `${date.toLocaleDateString([], { month: 'short', day: 'numeric' })} · ${time}`;
+}
+
+function setStatus(el, message, isError = false) {
+    if (!el) return;
+    el.textContent = message || '';
+    el.classList.toggle('error', !!isError);
+}
+
+// ---------- user data ----------
 
 function applyUserData(userData) {
     if (userData.displayName) {
         currentDisplayName = userData.displayName;
     }
-
-    currentProfilePic = userData.profilePic || defaultAvatar;
+    currentProfilePic = isSafeImageSrc(userData.profilePic) ? userData.profilePic : defaultAvatar;
 
     if (userInfoElement) {
-        userInfoElement.innerHTML = `
-            <p>Registration ID: #${userData.sequentialId}</p>
-        `;
+        userInfoElement.innerHTML = `<p>Registration ID: #${escapeHtml(userData.sequentialId)}</p>`;
     }
 
     if (profileButton && userData.sequentialId) {
         profileButton.onclick = () => {
-            window.location.href = `/aurora/users/${userData.sequentialId}/profile/`;
+            window.location.href = `/aurora/users/${encodeURIComponent(userData.sequentialId)}/profile/`;
         };
     }
 }
+
+const cachedSequentialId = localStorage.getItem('aurora_quick_id');
+if (cachedSequentialId && profileButton) {
+    profileButton.onclick = () => {
+        window.location.href = `/aurora/users/${encodeURIComponent(cachedSequentialId)}/profile/`;
+    };
+}
+
+// ---------- presence ----------
 
 function setupPresence(user) {
     const userStatusRef = doc(db, "status", user.uid);
@@ -66,7 +133,7 @@ function setupPresence(user) {
                 uid: user.uid,
                 displayName: currentDisplayName,
                 profilePic: currentProfilePic,
-                status: status,
+                status,
                 lastChanged: serverTimestamp()
             }, { merge: true });
         } catch (err) {
@@ -76,174 +143,258 @@ function setupPresence(user) {
 
     updateStatus('online');
 
-    const handleVisibilityChange = () => {
-        if (document.hidden) {
-            updateStatus('away');
-        } else {
-            updateStatus('online');
-        }
-    };
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
+    document.addEventListener("visibilitychange", () => {
+        updateStatus(document.hidden ? 'away' : 'online');
+    });
     window.addEventListener("blur", () => updateStatus('away'));
     window.addEventListener("focus", () => updateStatus('online'));
-
     window.addEventListener("beforeunload", () => {
         setDoc(userStatusRef, { status: 'offline', lastChanged: serverTimestamp() }, { merge: true });
     });
 
     presenceInterval = setInterval(() => {
-        if (!document.hidden) {
-            updateStatus('online');
-        }
+        if (!document.hidden) updateStatus('online');
     }, 30000);
 }
 
 function initOnlineUsersList() {
-    let onlineContainer = document.getElementById('online-users-container');
-    if (!onlineContainer) {
-        onlineContainer = document.createElement('div');
-        onlineContainer.id = 'online-users-container';
-        onlineContainer.className = 'active-users-card';
-        onlineContainer.innerHTML = `
-            <h3>Active Users</h3>
-            <div id="online-users-list" class="active-users-list"></div>
-        `;
-        const sidebar = document.querySelector('.sidebar');
-        if (sidebar) sidebar.appendChild(onlineContainer);
-    }
-
-    const listEl = document.getElementById('online-users-list');
+    if (!onlineUsersList) return;
     const statusQuery = collection(db, "status");
 
     onSnapshot(statusQuery, (snapshot) => {
-        if (!listEl) return;
-        listEl.innerHTML = '';
-        
+        onlineUsersList.innerHTML = '';
+        let anyOnline = false;
+
         snapshot.forEach((docSnap) => {
             const data = docSnap.data();
             if (data.status === 'offline') return;
+            anyOnline = true;
+
+            const statusClass = data.status === 'away' ? 'status-away' : 'status-online';
+            const statusLabel = data.status === 'away' ? 'Away / Minimized' : 'Online';
+            const avatar = isSafeImageSrc(data.profilePic) ? data.profilePic : defaultAvatar;
+            const name = escapeHtml(data.displayName || 'Anonymous');
 
             const userDiv = document.createElement('div');
             userDiv.className = 'active-user-item';
-
-            let statusClass = 'status-online';
-            let statusLabel = 'Online';
-            if (data.status === 'away') {
-                statusClass = 'status-away';
-                statusLabel = 'Away / Minimized';
-            }
-
             userDiv.innerHTML = `
                 <div class="active-user-avatar-wrapper">
-                    <img src="${data.profilePic || defaultAvatar}" class="active-user-avatar" onerror="this.src='${defaultAvatar}'">
+                    <img src="${avatar}" class="active-user-avatar" alt="" onerror="this.src='${defaultAvatar}'">
                     <span class="active-user-dot ${statusClass}" title="${statusLabel}"></span>
                 </div>
-                <span class="active-user-name" title="${data.displayName}">${data.displayName}</span>
+                <span class="active-user-name" title="${name}">${name}</span>
             `;
-            listEl.appendChild(userDiv);
+            onlineUsersList.appendChild(userDiv);
         });
+
+        if (!anyOnline) {
+            onlineUsersList.innerHTML = `<p class="empty-state">No one else is online right now.</p>`;
+        }
     });
 }
 
-function formatMessageText(text) {
-    if (!text) return '';
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    return text.replace(urlRegex, (url) => {
-        return `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color: #0066cc; text-decoration: underline;">${url}</a>`;
-    });
-}
-
-function setupImageLightbox() {
-    let modal = document.getElementById('image-modal');
-    if (!modal) {
-        modal = document.createElement('div');
-        modal.id = 'image-modal';
-        modal.className = 'image-modal hidden';
-        modal.innerHTML = `
-            <div class="image-modal-content">
-                <span class="image-modal-close">&times;</span>
-                <img id="image-modal-img" src="" alt="Enlarged view">
-            </div>
-        `;
-        document.body.appendChild(modal);
-
-        const closeBtn = modal.querySelector('.image-modal-close');
-        closeBtn.onclick = () => modal.classList.add('hidden');
-        modal.onclick = (e) => {
-            if (e.target === modal) modal.classList.add('hidden');
-        };
-    }
-}
-
-setTimeout(setupImageLightbox, 300);
+// ---------- lightbox ----------
 
 function openLightbox(imgSrc) {
-    const modal = document.getElementById('image-modal');
-    const modalImg = document.getElementById('image-modal-img');
-    if (modal && modalImg) {
-        modalImg.src = imgSrc;
-        modal.classList.remove('hidden');
+    if (!imageModal || !imageModalImg) return;
+    imageModalImg.src = imgSrc;
+    imageModal.classList.remove('hidden');
+}
+
+function closeLightbox() {
+    if (!imageModal) return;
+    imageModal.classList.add('hidden');
+    if (imageModalImg) imageModalImg.src = '';
+}
+
+if (imageModalClose) imageModalClose.addEventListener('click', closeLightbox);
+if (imageModal) {
+    imageModal.addEventListener('click', (e) => {
+        if (e.target === imageModal) closeLightbox();
+    });
+}
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && imageModal && !imageModal.classList.contains('hidden')) {
+        closeLightbox();
     }
+});
+
+// ---------- chat ----------
+
+function isScrolledNearBottom(el) {
+    return el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_NEAR_BOTTOM_PX;
 }
 
 function initChat() {
     const q = query(collection(db, "messages"), orderBy("createdAt", "desc"), limit(30));
 
-    const moderatorUids = [
-        "AQ1oLVW0fNgESU0H5GEvcycxYJ73",
-        "vmytwBIHywg7BoJWDnl1QOXXUh52",
-        "IW24TCbQSkamV2LdxSFObbBg9u73",
-        "FhWBbA6JlwXRPl39vvTjdFR6UaH2"
-    ];
-
     onSnapshot(q, (snapshot) => {
-        if (messageBox) {
-            messageBox.innerHTML = '';
-            
-            const docsToRender = [];
-            snapshot.forEach((doc) => {
-                docsToRender.push(doc.data());
-            });
+        if (!messageBox) return;
 
-            docsToRender.reverse().forEach((msg) => {
-                const div = document.createElement('div');
-                div.className = 'chat-message';
-                
-                const senderDisplay = msg.displayName || 'Anonymous';
-                const senderPic = msg.profilePic || defaultAvatar;
-                const isMod = moderatorUids.includes(msg.uid);
-                const shieldHtml = isMod ? `<span class="shield-icon"><i class="fa-solid fa-shield-halved"></i></span>` : '';
-                
-                let contentHtml = '';
-                if (msg.text) {
-                    contentHtml += `<span>${formatMessageText(msg.text)}</span>`;
-                }
-                if (msg.imageUrl) {
-                    contentHtml += `<div style="margin-top: 6px;"><img src="${msg.imageUrl}" class="chat-message-image clickable-image" alt="Attached image" /></div>`;
-                }
+        const shouldStickToBottom = isScrolledNearBottom(messageBox);
+        messageBox.innerHTML = '';
 
-                div.innerHTML = `
-                    <img src="${senderPic}" alt="${senderDisplay}'s profile picture" class="chat-profile-pic" onerror="this.src='${defaultAvatar}'">
-                    <div class="chat-message-content">
-                        <div class="chat-message-header">
-                            <span class="chat-sender-name">${senderDisplay}</span>${shieldHtml}:
-                        </div>
-                        <div class="chat-message-body">${contentHtml}</div>
+        const docsToRender = [];
+        snapshot.forEach((doc) => docsToRender.push(doc.data()));
+
+        if (docsToRender.length === 0) {
+            messageBox.innerHTML = `<p class="empty-state">No messages yet. Say hello!</p>`;
+            return;
+        }
+
+        docsToRender.reverse().forEach((msg) => {
+            const div = document.createElement('div');
+            div.className = 'chat-message';
+
+            const senderDisplay = escapeHtml(msg.displayName || 'Anonymous');
+            const senderPic = isSafeImageSrc(msg.profilePic) ? msg.profilePic : defaultAvatar;
+            const isMod = MODERATOR_UIDS.includes(msg.uid);
+            const shieldHtml = isMod ? `<span class="shield-icon" title="Moderator"><i class="fa-solid fa-shield-halved"></i></span>` : '';
+            const timeHtml = formatTimestamp(msg.createdAt) ? `<span class="chat-timestamp">${formatTimestamp(msg.createdAt)}</span>` : '';
+
+            let contentHtml = '';
+            if (msg.text) {
+                contentHtml += `<span>${formatMessageText(msg.text)}</span>`;
+            }
+            if (msg.imageUrl && isSafeImageSrc(msg.imageUrl)) {
+                contentHtml += `<div style="margin-top: 6px;"><img src="${msg.imageUrl}" class="chat-message-image clickable-image" alt="Attached image" /></div>`;
+            }
+
+            div.innerHTML = `
+                <img src="${senderPic}" alt="" class="chat-profile-pic" onerror="this.src='${defaultAvatar}'">
+                <div class="chat-message-content">
+                    <div class="chat-message-header">
+                        <span class="chat-sender-name">${senderDisplay}</span>${shieldHtml}${timeHtml}
                     </div>
-                `;
-                messageBox.appendChild(div);
-            });
+                    <div class="chat-message-body">${contentHtml}</div>
+                </div>
+            `;
+            messageBox.appendChild(div);
+        });
 
-            // Add click listeners to chat images for lightbox
-            messageBox.querySelectorAll('.clickable-image').forEach((img) => {
-                img.addEventListener('click', () => openLightbox(img.src));
-            });
-            
+        messageBox.querySelectorAll('.clickable-image').forEach((img) => {
+            img.addEventListener('click', () => openLightbox(img.src));
+        });
+
+        if (shouldStickToBottom) {
             messageBox.scrollTop = messageBox.scrollHeight;
         }
     });
 }
+
+async function sendChatMessage(text, imageUrl = null) {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    if (text === '/clear msgs') {
+        if (MODERATOR_UIDS.includes(user.uid)) {
+            try {
+                const querySnapshot = await getDocs(collection(db, "messages"));
+                await Promise.all(querySnapshot.docs.map((d) => deleteDoc(doc(db, "messages", d.id))));
+            } catch (error) {
+                console.error("Error clearing messages: ", error);
+            } finally {
+                messageInput.value = '';
+            }
+        } else {
+            alert('You do not have permission to use this command.');
+            messageInput.value = '';
+        }
+        return;
+    }
+
+    if (!text && !imageUrl) return;
+
+    setSending(true);
+    try {
+        await addDoc(collection(db, "messages"), {
+            uid: user.uid,
+            displayName: currentDisplayName,
+            profilePic: currentProfilePic,
+            text: text || '',
+            imageUrl: imageUrl || null,
+            createdAt: serverTimestamp()
+        });
+        messageInput.value = '';
+        if (imageInput) imageInput.value = '';
+    } catch (error) {
+        console.error("Error sending message: ", error);
+    } finally {
+        setSending(false);
+        messageInput.focus();
+    }
+}
+
+function setSending(isSending) {
+    if (sendButton) {
+        sendButton.disabled = isSending;
+        sendButton.textContent = isSending ? 'Sending…' : 'Send';
+    }
+}
+
+// ---------- image upload ----------
+
+function handleImageFile(file) {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+        alert('Please choose an image file.');
+        return;
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+        alert('Image is too large. Please choose one under 5MB.');
+        return;
+    }
+    const reader = new FileReader();
+    reader.onload = (uploadEvent) => {
+        const base64Image = uploadEvent.target.result;
+        const text = messageInput.value.trim();
+        sendChatMessage(text, base64Image);
+    };
+    reader.readAsDataURL(file);
+}
+
+if (attachButton && imageInput) {
+    attachButton.addEventListener('click', () => imageInput.click());
+    imageInput.addEventListener('change', (e) => handleImageFile(e.target.files[0]));
+}
+
+if (messageInput) {
+    messageInput.addEventListener('paste', (event) => {
+        const items = (event.clipboardData || event.originalEvent.clipboardData).items;
+        for (const item of items) {
+            if (item.kind === 'file' && item.type.startsWith('image/')) {
+                event.preventDefault();
+                handleImageFile(item.getAsFile());
+                break;
+            }
+        }
+    });
+}
+
+// ---------- form / send wiring ----------
+
+if (messageForm) {
+    messageForm.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const text = messageInput.value.trim();
+        if (text) sendChatMessage(text);
+    });
+} else if (sendButton) {
+    sendButton.addEventListener('click', () => {
+        const text = messageInput.value.trim();
+        if (text) sendChatMessage(text);
+    });
+    if (messageInput) {
+        messageInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                const text = messageInput.value.trim();
+                if (text) sendChatMessage(text);
+            }
+        });
+    }
+}
+
+// ---------- auth ----------
 
 onAuthStateChanged(auth, async (user) => {
     if (user) {
@@ -251,9 +402,13 @@ onAuthStateChanged(auth, async (user) => {
         const cachedData = localStorage.getItem(cacheKey);
 
         if (cachedData) {
-            const parsed = JSON.parse(cachedData);
-            applyUserData(parsed);
-            localStorage.setItem('aurora_quick_id', parsed.sequentialId);
+            try {
+                const parsed = JSON.parse(cachedData);
+                applyUserData(parsed);
+                localStorage.setItem('aurora_quick_id', parsed.sequentialId);
+            } catch {
+                localStorage.removeItem(cacheKey);
+            }
         }
 
         try {
@@ -265,12 +420,12 @@ onAuthStateChanged(auth, async (user) => {
                 localStorage.setItem(cacheKey, JSON.stringify(userData));
                 localStorage.setItem('aurora_quick_id', userData.sequentialId);
                 applyUserData(userData);
-            } else if (!cachedData) {
-                if (userInfoElement) userInfoElement.textContent = "User profile not found.";
+            } else if (!cachedData && userInfoElement) {
+                userInfoElement.textContent = "User profile not found.";
             }
         } catch (error) {
-            if (!cachedData) {
-                if (userInfoElement) userInfoElement.textContent = "Failed to load user data.";
+            if (!cachedData && userInfoElement) {
+                userInfoElement.textContent = "Failed to load user data.";
             }
         }
 
@@ -299,131 +454,5 @@ if (logoutButton) {
 if (settingsButton) {
     settingsButton.addEventListener('click', () => {
         window.location.href = '/aurora/settings/account/';
-    });
-}
-
-async function sendChatMessage(text, imageUrl = null) {
-    const user = auth.currentUser;
-    if (!user) return;
-
-    const moderatorUids = [
-        "AQ1oLVW0fNgESU0H5GEvcycxYJ73",
-        "vmytwBIHywg7BoJWDnl1QOXXUh52",
-        "IW24TCbQSkamV2LdxSFObbBg9u73",
-        "FhWBbA6JlwXRPl39vvTjdFR6UaH2"
-    ];
-
-    if (text === '/clear msgs') {
-        if (moderatorUids.includes(user.uid)) {
-            try {
-                const querySnapshot = await getDocs(collection(db, "messages"));
-                const deletePromises = querySnapshot.docs.map((document) => 
-                    deleteDoc(doc(db, "messages", document.id))
-                );
-                await Promise.all(deletePromises);
-                messageInput.value = '';
-                return;
-            } catch (error) {
-                console.error("Error clearing messages: ", error);
-            }
-        } else {
-            alert('You do not have permission to use this command.');
-            messageInput.value = '';
-            return;
-        }
-    }
-
-    try {
-        if (text || imageUrl) {
-            await addDoc(collection(db, "messages"), {
-                uid: user.uid,
-                displayName: currentDisplayName,
-                profilePic: currentProfilePic,
-                text: text || '',
-                imageUrl: imageUrl || null,
-                createdAt: serverTimestamp()
-            });
-            messageInput.value = '';
-            const imageInput = document.getElementById('image-file-input');
-            if (imageInput) imageInput.value = '';
-        }
-    } catch (error) {
-        console.error("Error sending message: ", error);
-    }
-}
-
-function setupImageUpload() {
-    const inputGroup = document.querySelector('.chat-input-group');
-    if (inputGroup && !document.getElementById('image-file-input')) {
-        const fileInput = document.createElement('input');
-        fileInput.type = 'file';
-        fileInput.id = 'image-file-input';
-        fileInput.accept = 'image/*';
-        fileInput.style.display = 'none';
-
-        const attachButton = document.createElement('button');
-        attachButton.type = 'button';
-        attachButton.innerHTML = '<i class="fa-solid fa-image"></i>';
-        attachButton.style.width = '48px';
-        attachButton.style.backgroundColor = '#e0e0e0';
-        attachButton.style.color = '#111111';
-        attachButton.style.border = '1px solid #cccccc';
-
-        attachButton.onclick = () => fileInput.click();
-
-        fileInput.onchange = (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = (uploadEvent) => {
-                const base64Image = uploadEvent.target.result;
-                const text = messageInput.value.trim();
-                sendChatMessage(text, base64Image);
-            };
-            reader.readAsDataURL(file);
-        };
-
-        inputGroup.insertBefore(attachButton, sendButton);
-        document.body.appendChild(fileInput);
-    }
-}
-
-setTimeout(setupImageUpload, 500);
-
-if (messageInput) {
-    messageInput.addEventListener('paste', (event) => {
-        const items = (event.clipboardData || event.originalEvent.clipboardData).items;
-        for (let index in items) {
-            const item = items[index];
-            if (item.kind === 'file' && item.type.startsWith('image/')) {
-                const blob = item.getAsFile();
-                const reader = new FileReader();
-                reader.onload = (uploadEvent) => {
-                    const base64Image = uploadEvent.target.result;
-                    const text = messageInput.value.trim();
-                    sendChatMessage(text, base64Image);
-                };
-                reader.readAsDataURL(blob);
-                event.preventDefault();
-                break;
-            }
-        }
-    });
-}
-
-if (sendButton) {
-    sendButton.addEventListener('click', () => {
-        const text = messageInput.value.trim();
-        if (text) sendChatMessage(text);
-    });
-}
-
-if (messageInput) {
-    messageInput.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter') {
-            const text = messageInput.value.trim();
-            if (text) sendChatMessage(text);
-        }
     });
 }

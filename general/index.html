@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Aurora chat dashboard">
     <title>Aurora</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../style.css">
@@ -11,20 +12,36 @@
     <div class="dashboard-layout">
         <div class="sidebar">
             <h1>Aurora</h1>
-            <div id="user-info"></div>
+            <div id="user-info" aria-live="polite"></div>
             <div class="button-group">
                 <button id="profile-button" type="button">Profile</button>
                 <button id="settings-button" type="button">Settings</button>
                 <button id="logout-button" type="button">Log Out</button>
             </div>
+
+            <div class="active-users-card">
+                <h3>Active Users</h3>
+                <div id="online-users-list" class="active-users-list" aria-live="polite"></div>
+            </div>
         </div>
 
         <div class="chat-panel">
-            <div id="message-box"></div>
-            <div class="chat-input-group">
-                <input type="text" id="message-input" placeholder="Type a message..." />
-                <button id="send-button" type="button">Send</button>
-            </div>
+            <div id="message-box" role="log" aria-live="polite" aria-label="Chat messages"></div>
+            <form id="message-form" class="chat-input-group">
+                <button id="attach-button" type="button" class="attach-button" aria-label="Attach image">
+                    <i class="fa-solid fa-image"></i>
+                </button>
+                <input type="file" id="image-file-input" accept="image/*" class="hidden" aria-hidden="true">
+                <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off" aria-label="Message">
+                <button id="send-button" type="submit">Send</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="image-modal" class="image-modal hidden" role="dialog" aria-modal="true" aria-label="Image preview">
+        <div class="image-modal-content">
+            <button id="image-modal-close" class="image-modal-close" type="button" aria-label="Close image preview">&times;</button>
+            <img id="image-modal-img" src="" alt="Enlarged view">
         </div>
     </div>
 
