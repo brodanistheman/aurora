@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp, getDocs, deleteDoc, Timestamp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyCLKCCpNbCs2AJm7g0JtGIjL43X5hr31N8",
@@ -26,6 +26,7 @@ const sendButton = document.getElementById('send-button');
 
 let currentDisplayName = 'Anonymous';
 let currentProfilePic = '';
+let presenceInterval = null;
 
 const defaultAvatar = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23cccccc'><path d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z'/></svg>";
 
@@ -54,6 +55,96 @@ function applyUserData(userData) {
             window.location.href = `/aurora/users/${userData.sequentialId}/profile/`;
         };
     }
+}
+
+function setupPresence(user) {
+    const userStatusRef = doc(db, "status", user.uid);
+
+    const updateStatus = async (status) => {
+        try {
+            await setDoc(userStatusRef, {
+                uid: user.uid,
+                displayName: currentDisplayName,
+                profilePic: currentProfilePic,
+                status: status,
+                lastChanged: serverTimestamp()
+            }, { merge: true });
+        } catch (err) {
+            console.error("Error updating presence:", err);
+        }
+    };
+
+    updateStatus('online');
+
+    const handleVisibilityChange = () => {
+        if (document.hidden) {
+            updateStatus('away');
+        } else {
+            updateStatus('online');
+        }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    window.addEventListener("blur", () => updateStatus('away'));
+    window.addEventListener("focus", () => updateStatus('online'));
+
+    window.addEventListener("beforeunload", () => {
+        setDoc(userStatusRef, { status: 'offline', lastChanged: serverTimestamp() }, { merge: true });
+    });
+
+    presenceInterval = setInterval(() => {
+        if (!document.hidden) {
+            updateStatus('online');
+        }
+    }, 30000);
+}
+
+function initOnlineUsersList() {
+    let onlineContainer = document.getElementById('online-users-container');
+    if (!onlineContainer) {
+        onlineContainer = document.createElement('div');
+        onlineContainer.id = 'online-users-container';
+        onlineContainer.style.marginTop = '15px';
+        onlineContainer.innerHTML = `
+            <h3 style="font-size: 14px; margin-bottom: 8px;">Active Users</h3>
+            <div id="online-users-list" style="display: flex; flex-direction: column; gap: 6px; max-height: 150px; overflow-y: auto;"></div>
+        `;
+        const sidebar = document.querySelector('.sidebar');
+        if (sidebar) sidebar.appendChild(onlineContainer);
+    }
+
+    const listEl = document.getElementById('online-users-list');
+    const statusQuery = collection(db, "status");
+
+    onSnapshot(statusQuery, (snapshot) => {
+        if (!listEl) return;
+        listEl.innerHTML = '';
+        
+        snapshot.forEach((docSnap) => {
+            const data = docSnap.data();
+            if (data.status === 'offline') return;
+
+            const userDiv = document.createElement('div');
+            userDiv.style.display = 'flex';
+            userDiv.style.alignItems = 'center';
+            userDiv.style.gap = '8px';
+            userDiv.style.fontSize = '13px';
+
+            let dotColor = '#22c55e';
+            if (data.status === 'away') {
+                dotColor = '#eab308';
+            }
+
+            userDiv.innerHTML = `
+                <div style="position: relative;">
+                    <img src="${data.profilePic || defaultAvatar}" style="width: 22px; height: 22px; border-radius: 50%; object-fit: cover;" onerror="this.src='${defaultAvatar}'">
+                    <span style="position: absolute; bottom: 0; right: 0; width: 8px; height: 8px; background-color: ${dotColor}; border-radius: 50%; border: 1px solid #fff;"></span>
+                </div>
+                <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px;" title="${data.displayName}">${data.displayName}</span>
+            `;
+            listEl.appendChild(userDiv);
+        });
+    });
 }
 
 function initChat() {
@@ -95,7 +186,7 @@ function initChat() {
                 div.innerHTML = `
                     <img src="${senderPic}" alt="${senderDisplay}'s profile picture" class="chat-profile-pic" style="width: 30px; height: 30px; border-radius: 50%; object-fit: cover; margin-right: 10px; flex-shrink: 0;" onerror="this.src='${defaultAvatar}'">
                     <div style="word-break: break-word; width: 100%; display: flex; align-items: center; flex-wrap: wrap;">
-                        <span style="font-weight: bold; margin-right: 4px;">${senderDisplay}${shieldHtml}:</span>&nbsp;${contentHtml}
+                        <span style="font-weight: bold; margin-right: 4px;">${senderDisplay}${shieldHtml}:</span>${contentHtml}
                     </div>
                 `;
                 messageBox.appendChild(div);
@@ -135,6 +226,8 @@ onAuthStateChanged(auth, async (user) => {
             }
         }
 
+        setupPresence(user);
+        initOnlineUsersList();
         initChat();
     } else {
         localStorage.removeItem('aurora_quick_id');
@@ -144,6 +237,11 @@ onAuthStateChanged(auth, async (user) => {
 
 if (logoutButton) {
     logoutButton.addEventListener('click', async () => {
+        const user = auth.currentUser;
+        if (user) {
+            await setDoc(doc(db, "status", user.uid), { status: 'offline', lastChanged: serverTimestamp() }, { merge: true });
+        }
+        if (presenceInterval) clearInterval(presenceInterval);
         await signOut(auth);
         localStorage.clear();
         window.location.href = '../';
