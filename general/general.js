@@ -146,6 +146,47 @@ function initOnlineUsersList() {
     });
 }
 
+function formatMessageText(text) {
+    if (!text) return '';
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    return text.replace(urlRegex, (url) => {
+        return `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color: #0066cc; text-decoration: underline;">${url}</a>`;
+    });
+}
+
+function setupImageLightbox() {
+    let modal = document.getElementById('image-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'image-modal';
+        modal.className = 'image-modal hidden';
+        modal.innerHTML = `
+            <div class="image-modal-content">
+                <span class="image-modal-close">&times;</span>
+                <img id="image-modal-img" src="" alt="Enlarged view">
+            </div>
+        `;
+        document.body.appendChild(modal);
+
+        const closeBtn = modal.querySelector('.image-modal-close');
+        closeBtn.onclick = () => modal.classList.add('hidden');
+        modal.onclick = (e) => {
+            if (e.target === modal) modal.classList.add('hidden');
+        };
+    }
+}
+
+setTimeout(setupImageLightbox, 300);
+
+function openLightbox(imgSrc) {
+    const modal = document.getElementById('image-modal');
+    const modalImg = document.getElementById('image-modal-img');
+    if (modal && modalImg) {
+        modalImg.src = imgSrc;
+        modal.classList.remove('hidden');
+    }
+}
+
 function initChat() {
     const q = query(collection(db, "messages"), orderBy("createdAt", "desc"), limit(30));
 
@@ -168,33 +209,35 @@ function initChat() {
             docsToRender.reverse().forEach((msg) => {
                 const div = document.createElement('div');
                 div.className = 'chat-message';
-                div.style.display = 'flex';
-                div.style.alignItems = 'flex-start';
-                div.style.padding = '8px';
-                div.style.marginBottom = '4px';
                 
                 const senderDisplay = msg.displayName || 'Anonymous';
                 const senderPic = msg.profilePic || defaultAvatar;
                 const isMod = moderatorUids.includes(msg.uid);
-                const shieldHtml = isMod ? `<span class="shield-icon" style="margin-left: 4px;"><i class="fa-solid fa-shield-halved"></i></span>` : '';
+                const shieldHtml = isMod ? `<span class="shield-icon"><i class="fa-solid fa-shield-halved"></i></span>` : '';
                 
                 let contentHtml = '';
                 if (msg.text) {
-                    contentHtml += `<span>${msg.text}</span>`;
+                    contentHtml += `<span>${formatMessageText(msg.text)}</span>`;
                 }
                 if (msg.imageUrl) {
-                    contentHtml += `<div style="margin-top: 6px;"><img src="${msg.imageUrl}" class="chat-message-image" alt="Attached image" /></div>`;
+                    contentHtml += `<div style="margin-top: 6px;"><img src="${msg.imageUrl}" class="chat-message-image clickable-image" alt="Attached image" /></div>`;
                 }
 
                 div.innerHTML = `
-                    <img src="${senderPic}" alt="${senderDisplay}'s profile picture" class="chat-profile-pic" style="width: 30px; height: 30px; border-radius: 50%; object-fit: cover; margin-right: 10px; flex-shrink: 0;" onerror="this.src='${defaultAvatar}'">
-                    <div style="word-break: break-word; width: 100%; display: flex; flex-direction: column;">
-                        <div>
-                            <span style="font-weight: bold; margin-right: 4px;">${senderDisplay}${shieldHtml}:</span>${contentHtml}
+                    <img src="${senderPic}" alt="${senderDisplay}'s profile picture" class="chat-profile-pic" onerror="this.src='${defaultAvatar}'">
+                    <div class="chat-message-content">
+                        <div class="chat-message-header">
+                            <span class="chat-sender-name">${senderDisplay}</span>${shieldHtml}:
                         </div>
+                        <div class="chat-message-body">${contentHtml}</div>
                     </div>
                 `;
                 messageBox.appendChild(div);
+            });
+
+            // Add click listeners to chat images for lightbox
+            messageBox.querySelectorAll('.clickable-image').forEach((img) => {
+                img.addEventListener('click', () => openLightbox(img.src));
             });
             
             messageBox.scrollTop = messageBox.scrollHeight;
@@ -347,6 +390,27 @@ function setupImageUpload() {
 }
 
 setTimeout(setupImageUpload, 500);
+
+if (messageInput) {
+    messageInput.addEventListener('paste', (event) => {
+        const items = (event.clipboardData || event.originalEvent.clipboardData).items;
+        for (let index in items) {
+            const item = items[index];
+            if (item.kind === 'file' && item.type.startsWith('image/')) {
+                const blob = item.getAsFile();
+                const reader = new FileReader();
+                reader.onload = (uploadEvent) => {
+                    const base64Image = uploadEvent.target.result;
+                    const text = messageInput.value.trim();
+                    sendChatMessage(text, base64Image);
+                };
+                reader.readAsDataURL(blob);
+                event.preventDefault();
+                break;
+            }
+        }
+    });
+}
 
 if (sendButton) {
     sendButton.addEventListener('click', () => {
