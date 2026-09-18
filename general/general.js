@@ -104,10 +104,10 @@ function initOnlineUsersList() {
     if (!onlineContainer) {
         onlineContainer = document.createElement('div');
         onlineContainer.id = 'online-users-container';
-        onlineContainer.style.marginTop = '15px';
+        onlineContainer.className = 'active-users-card';
         onlineContainer.innerHTML = `
-            <h3 style="font-size: 14px; margin-bottom: 8px;">Active Users</h3>
-            <div id="online-users-list" style="display: flex; flex-direction: column; gap: 6px; max-height: 150px; overflow-y: auto;"></div>
+            <h3>Active Users</h3>
+            <div id="online-users-list" class="active-users-list"></div>
         `;
         const sidebar = document.querySelector('.sidebar');
         if (sidebar) sidebar.appendChild(onlineContainer);
@@ -125,22 +125,21 @@ function initOnlineUsersList() {
             if (data.status === 'offline') return;
 
             const userDiv = document.createElement('div');
-            userDiv.style.display = 'flex';
-            userDiv.style.alignItems = 'center';
-            userDiv.style.gap = '8px';
-            userDiv.style.fontSize = '13px';
+            userDiv.className = 'active-user-item';
 
-            let dotColor = '#22c55e';
+            let statusClass = 'status-online';
+            let statusLabel = 'Online';
             if (data.status === 'away') {
-                dotColor = '#eab308';
+                statusClass = 'status-away';
+                statusLabel = 'Away / Minimized';
             }
 
             userDiv.innerHTML = `
-                <div style="position: relative;">
-                    <img src="${data.profilePic || defaultAvatar}" style="width: 22px; height: 22px; border-radius: 50%; object-fit: cover;" onerror="this.src='${defaultAvatar}'">
-                    <span style="position: absolute; bottom: 0; right: 0; width: 8px; height: 8px; background-color: ${dotColor}; border-radius: 50%; border: 1px solid #fff;"></span>
+                <div class="active-user-avatar-wrapper">
+                    <img src="${data.profilePic || defaultAvatar}" class="active-user-avatar" onerror="this.src='${defaultAvatar}'">
+                    <span class="active-user-dot ${statusClass}" title="${statusLabel}"></span>
                 </div>
-                <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px;" title="${data.displayName}">${data.displayName}</span>
+                <span class="active-user-name" title="${data.displayName}">${data.displayName}</span>
             `;
             listEl.appendChild(userDiv);
         });
