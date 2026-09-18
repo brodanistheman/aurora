@@ -242,7 +242,6 @@ html, body {
     background: #000;
 }
 
-/* Lightbox Modal Styles */
 .image-modal {
     position: fixed;
     z-index: 9999;
@@ -560,7 +559,6 @@ label[for="profile-pic-input"] {
     white-space: nowrap;
 }
 
-/* Responsive: stack sidebar above chat on narrow viewports */
 @media (max-width: 720px) {
     .dashboard-layout {
         flex-direction: column;

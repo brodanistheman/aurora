@@ -13,13 +13,6 @@ const firebaseConfig = {
     measurementId: "G-3XVQTC189X"
 };
 
-// NOTE: This client config being public is normal for Firebase — actual access
-// control (who can read/write/delete which documents) must be enforced with
-// Firestore Security Rules on the server side. The moderator check below (for
-// /clear msgs) is a UX convenience only; it does NOT stop someone from calling
-// the SDK directly. Make sure your Firestore rules restrict deletes on
-// "messages" to the same moderator UIDs, or this command is only cosmetically
-// protected.
 const MODERATOR_UIDS = [
     "AQ1oLVW0fNgESU0H5GEvcycxYJ73",
     "vmytwBIHywg7BoJWDnl1QOXXUh52",
@@ -27,12 +20,8 @@ const MODERATOR_UIDS = [
     "FhWBbA6JlwXRPl39vvTjdFR6UaH2"
 ];
 
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB
-// Firestore caps a single document at ~1MiB, and base64 inflates a file by
-// ~33%. Video files blow past that fast, so this stays deliberately small —
-// short clips only. For anything longer, store the file in Firebase Storage
-// and save its download URL in videoUrl instead of a data: URI.
-const MAX_VIDEO_BYTES = 4 * 1024 * 1024; // 4MB
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 4 * 1024 * 1024;
 const SCROLL_NEAR_BOTTOM_PX = 80;
 
 const app = initializeApp(firebaseConfig);
@@ -59,8 +48,6 @@ const defaultAvatar = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/200
 let currentDisplayName = 'Anonymous';
 let currentProfilePic = '';
 let presenceInterval = null;
-
-// ---------- helpers ----------
 
 function escapeHtml(str) {
     if (str === null || str === undefined) return '';
@@ -102,8 +89,6 @@ function setStatus(el, message, isError = false) {
     el.classList.toggle('error', !!isError);
 }
 
-// ---------- user data ----------
-
 function applyUserData(userData) {
     if (userData.displayName) {
         currentDisplayName = userData.displayName;
@@ -127,8 +112,6 @@ if (cachedSequentialId && profileButton) {
         window.location.href = `/aurora/users/${encodeURIComponent(cachedSequentialId)}/profile/`;
     };
 }
-
-// ---------- presence ----------
 
 function setupPresence(user) {
     const userStatusRef = doc(db, "status", user.uid);
@@ -199,8 +182,6 @@ function initOnlineUsersList() {
     });
 }
 
-// ---------- lightbox ----------
-
 function openLightbox(imgSrc) {
     if (!imageModal || !imageModalImg) return;
     imageModalImg.src = imgSrc;
@@ -224,8 +205,6 @@ document.addEventListener('keydown', (e) => {
         closeLightbox();
     }
 });
-
-// ---------- chat ----------
 
 function isScrolledNearBottom(el) {
     return el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_NEAR_BOTTOM_PX;
@@ -293,7 +272,6 @@ async function clearAllMessages() {
     await Promise.all(querySnapshot.docs.map((d) => deleteDoc(doc(db, "messages", d.id))));
 }
 
-// Moderator-only chat commands, keyed by the exact (lowercased) command text.
 const MODERATOR_COMMANDS = {
     '/clear msgs': clearAllMessages
 };
@@ -349,8 +327,6 @@ function setSending(isSending) {
     }
 }
 
-// ---------- media upload (images + video) ----------
-
 function handleMediaFile(file) {
     if (!file) return;
 
@@ -396,8 +372,6 @@ if (messageInput) {
     });
 }
 
-// ---------- form / send wiring ----------
-
 if (messageForm) {
     messageForm.addEventListener('submit', (event) => {
         event.preventDefault();
@@ -419,7 +393,125 @@ if (messageForm) {
     }
 }
 
-// ---------- auth ----------
+const servers = {
+    iceServers: [
+        { urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] }
+    ]
+};
+
+let pc = null;
+let localStream = null;
+let remoteStream = null;
+let currentCallId = null;
+
+const callModal = document.getElementById('call-modal');
+const localVideo = document.getElementById('local-video');
+const remoteVideo = document.getElementById('remote-video');
+const hangupButton = document.getElementById('hangup-button');
+const callStatus = document.getElementById('call-status');
+
+function showCallModal() {
+    if (callModal) callModal.classList.remove('hidden');
+}
+
+function hideCallModal() {
+    if (callModal) callModal.classList.add('hidden');
+}
+
+async function startLocalMedia(videoEnabled = true) {
+    try {
+        localStream = await navigator.mediaDevices.getUserMedia({ video: videoEnabled, audio: true });
+        if (localVideo) localVideo.srcObject = localStream;
+    } catch (err) {
+        console.error("Error accessing media devices.", err);
+        alert("Could not access camera/microphone.");
+    }
+}
+
+async function hangUpCall() {
+    if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+    }
+    if (remoteStream) {
+        remoteStream.getTracks().forEach(track => track.stop());
+    }
+    if (pc) {
+        pc.close();
+        pc = null;
+    }
+
+    if (currentCallId) {
+        try {
+            await deleteDoc(doc(db, "calls", currentCallId));
+        } catch (e) {
+            console.error("Error cleaning call doc:", e);
+        }
+        currentCallId = null;
+    }
+
+    hideCallModal();
+}
+
+if (hangupButton) {
+    hangupButton.addEventListener('click', hangUpCall);
+}
+
+async function initiateCall(isVideo = true) {
+    await startLocalMedia(isVideo);
+    showCallModal();
+    if (callStatus) callStatus.textContent = "Calling...";
+
+    pc = new RTCPeerConnection(servers);
+
+    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+    remoteStream = new MediaStream();
+    if (remoteVideo) remoteVideo.srcObject = remoteStream;
+
+    pc.ontrack = (event) => {
+        event.streams[0].getTracks().forEach(track => {
+            remoteStream.addTrack(track);
+        });
+    };
+
+    const callRef = doc(collection(db, "calls"));
+    currentCallId = callRef.id;
+
+    const offerCandidates = collection(callRef, "offerCandidates");
+    const answerCandidates = collection(callRef, "answerCandidates");
+
+    pc.onicecandidate = (event) => {
+        if (event.candidate) {
+            addDoc(offerCandidates, event.candidate.toJSON());
+        }
+    };
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    const callWithOffer = {
+        offer: { type: offer.type, sdp: offer.sdp },
+    };
+    await setDoc(callRef, callWithOffer);
+
+    onSnapshot(callRef, (snapshot) => {
+        const data = snapshot.data();
+        if (!pc.currentRemoteDescription && data && data.answer) {
+            const answer = new RTCSessionDescription(data.answer);
+            pc.setRemoteDescription(answer);
+            if (callStatus) callStatus.textContent = "Connected!";
+        }
+    });
+
+    onSnapshot(answerCandidates, (snapshot) => {
+        snapshot.docChanges().forEach((change) => {
+            if (change.type === 'added') {
+                const data = change.doc.data();
+                pc.addIceCandidate(new RTCIceCandidate(data));
+            }
+        });
+    });
+}
 
 onAuthStateChanged(auth, async (user) => {
     if (user) {

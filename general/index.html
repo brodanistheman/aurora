@@ -45,6 +45,17 @@
         </div>
     </div>
 
+    <div id="call-modal" class="image-modal hidden" role="dialog" aria-modal="true" aria-label="Video Call">
+        <div class="image-modal-content" style="background: #111; padding: 20px; border-radius: 8px; text-align: center;">
+            <div style="display: flex; gap: 10px; justify-content: center; margin-bottom: 15px;">
+                <video id="local-video" autoplay muted playsinline style="width: 200px; height: 150px; background: #000; border-radius: 6px; object-fit: cover;"></video>
+                <video id="remote-video" autoplay playsinline style="width: 200px; height: 150px; background: #000; border-radius: 6px; object-fit: cover;"></video>
+            </div>
+            <div id="call-status" style="color: #fff; margin-bottom: 15px;">Connecting call...</div>
+            <button id="hangup-button" style="background: #b00020; color: #fff; width: auto; padding: 8px 16px;">Hang Up</button>
+        </div>
+    </div>
+
     <script type="module" src="general.js"></script>
 </body>
 </html>
