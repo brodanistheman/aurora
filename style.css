@@ -108,12 +108,7 @@ html, body {
     word-break: break-word;
     border-radius: 6px;
     display: flex;
-    align-items: flex-start;
-}
-
-.chat-message span {
-    font-weight: bold;
-    color: #333;
+    align-items: center;
 }
 
 .chat-profile-pic {
@@ -124,8 +119,30 @@ html, body {
     aspect-ratio: 1 / 1;
     border-radius: 50%;
     object-fit: cover;
-    margin-right: 8px;
-    display: inline-block;
+    margin-right: 10px;
+    display: block;
+}
+
+.chat-message-content {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    width: 100%;
+}
+
+.chat-message-header {
+    display: inline-flex;
+    align-items: center;
+    margin-right: 6px;
+}
+
+.chat-sender-name {
+    font-weight: bold;
+    color: #333;
+}
+
+.chat-message-body {
+    display: inline;
 }
 
 .chat-message .shield-icon {
@@ -143,6 +160,54 @@ html, body {
     object-fit: cover;
     border: 1px solid #ddd;
     display: block;
+    cursor: pointer;
+    transition: opacity 0.2s ease;
+}
+
+.chat-message-image:hover {
+    opacity: 0.9;
+}
+
+/* Lightbox Modal Styles */
+.image-modal {
+    position: fixed;
+    z-index: 9999;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.image-modal.hidden {
+    display: none;
+}
+
+.image-modal-content {
+    position: relative;
+    max-width: 90vw;
+    max-height: 90vh;
+}
+
+.image-modal-content img {
+    max-width: 90vw;
+    max-height: 90vh;
+    border-radius: 8px;
+    object-fit: contain;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.image-modal-close {
+    position: absolute;
+    top: -40px;
+    right: 0;
+    color: #ffffff;
+    font-size: 32px;
+    font-weight: bold;
+    cursor: pointer;
 }
 
 .login-container {
