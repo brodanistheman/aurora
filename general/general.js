@@ -152,7 +152,8 @@ function initChat() {
     const moderatorUids = [
         "AQ1oLVW0fNgESU0H5GEvcycxYJ73",
         "vmytwBIHywg7BoJWDnl1QOXXUh52",
-        "IW24TCbQSkamV2LdxSFObbBg9u73"
+        "IW24TCbQSkamV2LdxSFObbBg9u73",
+        "FhWBbA6JlwXRPl39vvTjdFR6UaH2"
     ];
 
     onSnapshot(q, (snapshot) => {
@@ -168,7 +169,7 @@ function initChat() {
                 const div = document.createElement('div');
                 div.className = 'chat-message';
                 div.style.display = 'flex';
-                div.style.alignItems = 'center';
+                div.style.alignItems = 'flex-start';
                 div.style.padding = '8px';
                 div.style.marginBottom = '4px';
                 
@@ -181,11 +182,16 @@ function initChat() {
                 if (msg.text) {
                     contentHtml += `<span>${msg.text}</span>`;
                 }
+                if (msg.imageUrl) {
+                    contentHtml += `<div style="margin-top: 6px;"><img src="${msg.imageUrl}" class="chat-message-image" alt="Attached image" /></div>`;
+                }
 
                 div.innerHTML = `
                     <img src="${senderPic}" alt="${senderDisplay}'s profile picture" class="chat-profile-pic" style="width: 30px; height: 30px; border-radius: 50%; object-fit: cover; margin-right: 10px; flex-shrink: 0;" onerror="this.src='${defaultAvatar}'">
-                    <div style="word-break: break-word; width: 100%; display: flex; align-items: center; flex-wrap: wrap;">
-                        <span style="font-weight: bold; margin-right: 4px;">${senderDisplay}${shieldHtml}:</span>${contentHtml}
+                    <div style="word-break: break-word; width: 100%; display: flex; flex-direction: column;">
+                        <div>
+                            <span style="font-weight: bold; margin-right: 4px;">${senderDisplay}${shieldHtml}:</span>${contentHtml}
+                        </div>
                     </div>
                 `;
                 messageBox.appendChild(div);
@@ -253,14 +259,15 @@ if (settingsButton) {
     });
 }
 
-async function sendChatMessage(text) {
+async function sendChatMessage(text, imageUrl = null) {
     const user = auth.currentUser;
     if (!user) return;
 
     const moderatorUids = [
         "AQ1oLVW0fNgESU0H5GEvcycxYJ73",
         "vmytwBIHywg7BoJWDnl1QOXXUh52",
-        "IW24TCbQSkamV2LdxSFObbBg9u73"
+        "IW24TCbQSkamV2LdxSFObbBg9u73",
+        "FhWBbA6JlwXRPl39vvTjdFR6UaH2"
     ];
 
     if (text === '/clear msgs') {
@@ -284,25 +291,67 @@ async function sendChatMessage(text) {
     }
 
     try {
-        if (text) {
+        if (text || imageUrl) {
             await addDoc(collection(db, "messages"), {
                 uid: user.uid,
                 displayName: currentDisplayName,
                 profilePic: currentProfilePic,
-                text: text,
+                text: text || '',
+                imageUrl: imageUrl || null,
                 createdAt: serverTimestamp()
             });
             messageInput.value = '';
+            const imageInput = document.getElementById('image-file-input');
+            if (imageInput) imageInput.value = '';
         }
     } catch (error) {
         console.error("Error sending message: ", error);
     }
 }
 
+function setupImageUpload() {
+    const inputGroup = document.querySelector('.chat-input-group');
+    if (inputGroup && !document.getElementById('image-file-input')) {
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.id = 'image-file-input';
+        fileInput.accept = 'image/*';
+        fileInput.style.display = 'none';
+
+        const attachButton = document.createElement('button');
+        attachButton.type = 'button';
+        attachButton.innerHTML = '<i class="fa-solid fa-image"></i>';
+        attachButton.style.width = '48px';
+        attachButton.style.backgroundColor = '#e0e0e0';
+        attachButton.style.color = '#111111';
+        attachButton.style.border = '1px solid #cccccc';
+
+        attachButton.onclick = () => fileInput.click();
+
+        fileInput.onchange = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (uploadEvent) => {
+                const base64Image = uploadEvent.target.result;
+                const text = messageInput.value.trim();
+                sendChatMessage(text, base64Image);
+            };
+            reader.readAsDataURL(file);
+        };
+
+        inputGroup.insertBefore(attachButton, sendButton);
+        document.body.appendChild(fileInput);
+    }
+}
+
+setTimeout(setupImageUpload, 500);
+
 if (sendButton) {
     sendButton.addEventListener('click', () => {
         const text = messageInput.value.trim();
-        sendChatMessage(text);
+        if (text) sendChatMessage(text);
     });
 }
 
@@ -310,7 +359,7 @@ if (messageInput) {
     messageInput.addEventListener('keydown', (event) => {
         if (event.key === 'Enter') {
             const text = messageInput.value.trim();
-            sendChatMessage(text);
+            if (text) sendChatMessage(text);
         }
     });
 }
