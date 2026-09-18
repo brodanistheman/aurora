@@ -1,4 +1,3 @@
-```javascript
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
@@ -14,9 +13,6 @@ const firebaseConfig = {
     measurementId: "G-3XVQTC189X"
 };
 
-// NOTE: This client config being public is normal for Firebase — actual access
-// control (who can read/write/delete which documents) must be enforced with
-// Firestore Security Rules on the server side.
 const MODERATOR_UIDS = [
     "AQ1oLVW0fNgESU0H5GEvcycxYJ73",
     "vmytwBIHywg7BoJWDnl1QOXXUh52",
@@ -24,9 +20,7 @@ const MODERATOR_UIDS = [
     "FhWBbA6JlwXRPl39vvTjdFR6UaH2"
 ];
 
-// Media is stored in Firebase Storage. Firestore only stores the download URL,
-// allowing files up to 100MB without hitting the Firestore document-size limit.
-const MAX_MEDIA_BYTES = 100 * 1024 * 1024; // 100MB
+const MAX_MEDIA_BYTES = 100 * 1024 * 1024;
 const SCROLL_NEAR_BOTTOM_PX = 80;
 
 const app = initializeApp(firebaseConfig);
@@ -54,8 +48,6 @@ const defaultAvatar = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/200
 let currentDisplayName = 'Anonymous';
 let currentProfilePic = '';
 let presenceInterval = null;
-
-// ---------- helpers ----------
 
 function escapeHtml(str) {
     if (str === null || str === undefined) return '';
@@ -97,8 +89,6 @@ function setStatus(el, message, isError = false) {
     el.classList.toggle('error', !!isError);
 }
 
-// ---------- user data ----------
-
 function applyUserData(userData) {
     if (userData.displayName) {
         currentDisplayName = userData.displayName;
@@ -129,8 +119,6 @@ if (cachedSequentialId && profileButton) {
             `/aurora/users/${encodeURIComponent(cachedSequentialId)}/profile/`;
     };
 }
-
-// ---------- presence ----------
 
 function setupPresence(user) {
     const userStatusRef = doc(db, "status", user.uid);
@@ -226,7 +214,6 @@ function initOnlineUsersList() {
                         title="${statusLabel}"
                     ></span>
                 </div>
-
                 <span
                     class="active-user-name"
                     title="${name}"
@@ -242,8 +229,6 @@ function initOnlineUsersList() {
         }
     });
 }
-
-// ---------- lightbox ----------
 
 function openLightbox(imgSrc) {
     if (!imageModal || !imageModalImg) return;
@@ -268,9 +253,7 @@ if (imageModalClose) {
 
 if (imageModal) {
     imageModal.addEventListener('click', (e) => {
-        if (e.target === imageModal) {
-            closeLightbox();
-        }
+        if (e.target === imageModal) closeLightbox();
     });
 }
 
@@ -283,8 +266,6 @@ document.addEventListener('keydown', (e) => {
         closeLightbox();
     }
 });
-
-// ---------- chat ----------
 
 function isScrolledNearBottom(el) {
     return el.scrollHeight - el.scrollTop - el.clientHeight <
@@ -376,14 +357,12 @@ function initChat() {
                     class="chat-profile-pic"
                     onerror="this.src='${defaultAvatar}'"
                 >
-
                 <div class="chat-message-content">
                     <div class="chat-message-header">
                         <span class="chat-sender-name">
                             ${senderDisplay}
                         </span>
                     </div>
-
                     <div class="chat-message-body">
                         ${contentHtml}
                     </div>
@@ -435,19 +414,14 @@ async function sendChatMessage(text, attachment = null) {
     if (command) {
         if (!MODERATOR_UIDS.includes(user.uid)) {
             alert('You do not have permission to use this command.');
-
             messageInput.value = '';
-
             return;
         }
 
         try {
             await command();
         } catch (error) {
-            console.error(
-                "Error running command: ",
-                error
-            );
+            console.error("Error running command: ", error);
         } finally {
             messageInput.value = '';
         }
@@ -466,13 +440,11 @@ async function sendChatMessage(text, attachment = null) {
             profilePic: currentProfilePic,
             text: text || '',
             imageUrl:
-                attachment &&
-                attachment.type === 'image'
+                attachment && attachment.type === 'image'
                     ? attachment.url
                     : null,
             videoUrl:
-                attachment &&
-                attachment.type === 'video'
+                attachment && attachment.type === 'video'
                     ? attachment.url
                     : null,
             createdAt: serverTimestamp()
@@ -484,10 +456,7 @@ async function sendChatMessage(text, attachment = null) {
             imageInput.value = '';
         }
     } catch (error) {
-        console.error(
-            "Error sending message: ",
-            error
-        );
+        console.error("Error sending message: ", error);
     } finally {
         setSending(false);
         messageInput.focus();
@@ -498,13 +467,9 @@ function setSending(isSending) {
     if (sendButton) {
         sendButton.disabled = isSending;
         sendButton.textContent =
-            isSending
-                ? 'Sending...'
-                : 'Send';
+            isSending ? 'Sending...' : 'Send';
     }
 }
-
-// ---------- media upload (images + video) ----------
 
 function formatBytes(bytes) {
     if (bytes < 1024 * 1024) {
@@ -518,9 +483,7 @@ async function uploadMediaToStorage(file) {
     const user = auth.currentUser;
 
     if (!user) {
-        throw new Error(
-            'You must be signed in to upload media.'
-        );
+        throw new Error('You must be signed in to upload media.');
     }
 
     const safeName =
@@ -552,7 +515,6 @@ async function uploadMediaToStorage(file) {
 
         uploadTask.on(
             'state_changed',
-
             (snapshot) => {
                 const percent =
                     snapshot.totalBytes
@@ -570,7 +532,6 @@ async function uploadMediaToStorage(file) {
                         `Uploading ${percent}%`;
                 }
             },
-
             (error) => {
                 console.error(
                     'Media upload failed:',
@@ -579,7 +540,6 @@ async function uploadMediaToStorage(file) {
 
                 reject(error);
             },
-
             async () => {
                 try {
                     const downloadUrl =
@@ -606,10 +566,7 @@ async function handleMediaFile(file) {
         file.type.startsWith('video/');
 
     if (!isImage && !isVideo) {
-        alert(
-            'Please choose an image or video file.'
-        );
-
+        alert('Please choose an image or video file.');
         return;
     }
 
@@ -617,7 +574,6 @@ async function handleMediaFile(file) {
         alert(
             `File is too large. Please choose a file under 100MB. Selected file: ${formatBytes(file.size)}`
         );
-
         return;
     }
 
@@ -676,9 +632,7 @@ if (attachButton && imageInput) {
 
     imageInput.addEventListener(
         'change',
-        (e) => handleMediaFile(
-            e.target.files[0]
-        )
+        (e) => handleMediaFile(e.target.files[0])
     );
 }
 
@@ -701,19 +655,13 @@ if (messageInput) {
                     )
                 ) {
                     event.preventDefault();
-
-                    handleMediaFile(
-                        item.getAsFile()
-                    );
-
+                    handleMediaFile(item.getAsFile());
                     break;
                 }
             }
         }
     );
 }
-
-// ---------- form / send wiring ----------
 
 if (messageForm) {
     messageForm.addEventListener(
@@ -759,8 +707,6 @@ if (messageForm) {
     }
 }
 
-// ---------- auth ----------
-
 onAuthStateChanged(
     auth,
     async (user) => {
@@ -783,9 +729,7 @@ onAuthStateChanged(
                         parsed.sequentialId
                     );
                 } catch {
-                    localStorage.removeItem(
-                        cacheKey
-                    );
+                    localStorage.removeItem(cacheKey);
                 }
             }
 
@@ -853,17 +797,14 @@ if (logoutButton) {
                     doc(db, "status", user.uid),
                     {
                         status: 'offline',
-                        lastChanged:
-                            serverTimestamp()
+                        lastChanged: serverTimestamp()
                     },
                     { merge: true }
                 );
             }
 
             if (presenceInterval) {
-                clearInterval(
-                    presenceInterval
-                );
+                clearInterval(presenceInterval);
             }
 
             await signOut(auth);
@@ -884,4 +825,3 @@ if (settingsButton) {
         }
     );
 }
-```
