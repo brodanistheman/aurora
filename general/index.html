@@ -28,10 +28,10 @@
         <div class="chat-panel">
             <div id="message-box" role="log" aria-live="polite" aria-label="Chat messages"></div>
             <form id="message-form" class="chat-input-group">
-                <button id="attach-button" type="button" class="attach-button" aria-label="Attach image">
-                    <i class="fa-solid fa-image"></i>
+                <button id="attach-button" type="button" class="attach-button" aria-label="Attach image or video">
+                    <i class="fa-solid fa-paperclip"></i>
                 </button>
-                <input type="file" id="image-file-input" accept="image/*" class="hidden" aria-hidden="true">
+                <input type="file" id="image-file-input" accept="image/*,video/*" class="hidden" aria-hidden="true">
                 <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off" aria-label="Message">
                 <button id="send-button" type="submit">Send</button>
             </form>

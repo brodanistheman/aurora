@@ -232,6 +232,16 @@ html, body {
     opacity: 0.92;
 }
 
+.chat-message-video {
+    max-width: 280px;
+    max-height: 240px;
+    width: 100%;
+    border-radius: 8px;
+    border: 1px solid #e2e2e2;
+    display: block;
+    background: #000;
+}
+
 /* Lightbox Modal Styles */
 .image-modal {
     position: fixed;

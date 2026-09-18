@@ -27,6 +27,11 @@ const MODERATOR_UIDS = [
 ];
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB
+// Firestore caps a single document at ~1MiB, and base64 inflates a file by
+// ~33%. Video files blow past that fast, so this stays deliberately small —
+// short clips only. For anything longer, store the file in Firebase Storage
+// and save its download URL in videoUrl instead of a data: URI.
+const MAX_VIDEO_BYTES = 4 * 1024 * 1024; // 4MB
 const SCROLL_NEAR_BOTTOM_PX = 80;
 
 const app = initializeApp(firebaseConfig);
@@ -66,9 +71,18 @@ function escapeHtml(str) {
         .replace(/'/g, '&#039;');
 }
 
-function isSafeImageSrc(src) {
+function isSafeMediaSrc(src, kind) {
     if (!src) return false;
-    return src.startsWith('data:image/') || src.startsWith('https://') || src.startsWith('http://');
+    if (src.startsWith('https://') || src.startsWith('http://')) return true;
+    return src.startsWith(`data:${kind}/`);
+}
+
+function isSafeImageSrc(src) {
+    return isSafeMediaSrc(src, 'image');
+}
+
+function isSafeVideoSrc(src) {
+    return isSafeMediaSrc(src, 'video');
 }
 
 function formatMessageText(text) {
@@ -247,6 +261,9 @@ function initChat() {
             if (msg.imageUrl && isSafeImageSrc(msg.imageUrl)) {
                 contentHtml += `<div style="margin-top: 6px;"><img src="${msg.imageUrl}" class="chat-message-image clickable-image" alt="Attached image" /></div>`;
             }
+            if (msg.videoUrl && isSafeVideoSrc(msg.videoUrl)) {
+                contentHtml += `<div style="margin-top: 6px;"><video src="${msg.videoUrl}" class="chat-message-video" controls preload="metadata"></video></div>`;
+            }
 
             div.innerHTML = `
                 <img src="${senderPic}" alt="" class="chat-profile-pic" onerror="this.src='${defaultAvatar}'">
@@ -280,7 +297,7 @@ const MODERATOR_COMMANDS = {
     '/clear msgs': clearAllMessages
 };
 
-async function sendChatMessage(text, imageUrl = null) {
+async function sendChatMessage(text, attachment = null) {
     const user = auth.currentUser;
     if (!user) return;
 
@@ -301,7 +318,7 @@ async function sendChatMessage(text, imageUrl = null) {
         return;
     }
 
-    if (!text && !imageUrl) return;
+    if (!text && !attachment) return;
 
     setSending(true);
     try {
@@ -310,7 +327,8 @@ async function sendChatMessage(text, imageUrl = null) {
             displayName: currentDisplayName,
             profilePic: currentProfilePic,
             text: text || '',
-            imageUrl: imageUrl || null,
+            imageUrl: attachment && attachment.type === 'image' ? attachment.url : null,
+            videoUrl: attachment && attachment.type === 'video' ? attachment.url : null,
             createdAt: serverTimestamp()
         });
         messageInput.value = '';
@@ -330,39 +348,47 @@ function setSending(isSending) {
     }
 }
 
-// ---------- image upload ----------
+// ---------- media upload (images + video) ----------
 
-function handleImageFile(file) {
+function handleMediaFile(file) {
     if (!file) return;
-    if (!file.type.startsWith('image/')) {
-        alert('Please choose an image file.');
+
+    const isImage = file.type.startsWith('image/');
+    const isVideo = file.type.startsWith('video/');
+
+    if (!isImage && !isVideo) {
+        alert('Please choose an image or video file.');
         return;
     }
-    if (file.size > MAX_IMAGE_BYTES) {
-        alert('Image is too large. Please choose one under 5MB.');
+
+    const maxBytes = isVideo ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
+    if (file.size > maxBytes) {
+        const limitLabel = isVideo ? '4MB' : '5MB';
+        alert(`${isVideo ? 'Video' : 'Image'} is too large. Please choose one under ${limitLabel}.`);
         return;
     }
+
     const reader = new FileReader();
     reader.onload = (uploadEvent) => {
-        const base64Image = uploadEvent.target.result;
+        const dataUrl = uploadEvent.target.result;
         const text = messageInput.value.trim();
-        sendChatMessage(text, base64Image);
+        sendChatMessage(text, { type: isVideo ? 'video' : 'image', url: dataUrl });
     };
     reader.readAsDataURL(file);
 }
 
 if (attachButton && imageInput) {
     attachButton.addEventListener('click', () => imageInput.click());
-    imageInput.addEventListener('change', (e) => handleImageFile(e.target.files[0]));
+    imageInput.addEventListener('change', (e) => handleMediaFile(e.target.files[0]));
 }
 
 if (messageInput) {
     messageInput.addEventListener('paste', (event) => {
         const items = (event.clipboardData || event.originalEvent.clipboardData).items;
         for (const item of items) {
-            if (item.kind === 'file' && item.type.startsWith('image/')) {
+            if (item.kind === 'file' && (item.type.startsWith('image/') || item.type.startsWith('video/'))) {
                 event.preventDefault();
-                handleImageFile(item.getAsFile());
+                handleMediaFile(item.getAsFile());
                 break;
             }
         }
