@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp, getDocs, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-storage.js";
 
 const firebaseConfig = {
@@ -166,14 +166,7 @@ function initOnlineUsersList() {
                     <span class="active-user-dot ${statusClass}" title="${statusLabel}"></span>
                 </div>
                 <span class="active-user-name" title="${name}" style="flex:1; overflow:hidden; text-overflow:ellipsis;">${name}</span>
-                <button class="call-trigger-btn" type="button" style="width: auto; padding: 4px 8px; font-size: 12px; margin: 0;">Call</button>
             `;
-
-            const callBtn = userDiv.querySelector('.call-trigger-btn');
-            callBtn.addEventListener('click', () => {
-                initiateCall(true);
-            });
-
             onlineUsersList.appendChild(userDiv);
         });
 
@@ -181,6 +174,17 @@ function initOnlineUsersList() {
             onlineUsersList.innerHTML = `<p class="empty-state">No one else is online right now.</p>`;
         }
     });
+
+    const sidebar = document.querySelector('.sidebar');
+    if (sidebar && !document.getElementById('group-call-btn')) {
+        const groupBtn = document.createElement('button');
+        groupBtn.id = 'group-call-btn';
+        groupBtn.type = 'button';
+        groupBtn.textContent = 'Start Group Call';
+        groupBtn.style.marginTop = '10px';
+        groupBtn.addEventListener('click', () => joinGroupCall("main-room"));
+        sidebar.appendChild(groupBtn);
+    }
 }
 
 function openLightbox(imgSrc) {
@@ -400,14 +404,13 @@ const servers = {
     ]
 };
 
-let pc = null;
 let localStream = null;
-let remoteStream = null;
-let currentCallId = null;
+let currentRoomId = null;
+let peerConnections = {};
 
 const callModal = document.getElementById('call-modal');
 const localVideo = document.getElementById('local-video');
-const remoteVideo = document.getElementById('remote-video');
+const videoGrid = document.getElementById('video-grid');
 const hangupButton = document.getElementById('hangup-button');
 const callStatus = document.getElementById('call-status');
 
@@ -419,9 +422,9 @@ function hideCallModal() {
     if (callModal) callModal.classList.add('hidden');
 }
 
-async function startLocalMedia(videoEnabled = true) {
+async function startLocalMedia() {
     try {
-        localStream = await navigator.mediaDevices.getUserMedia({ video: videoEnabled, audio: true });
+        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         if (localVideo) localVideo.srcObject = localStream;
     } catch (err) {
         console.error("Error accessing media devices.", err);
@@ -429,86 +432,106 @@ async function startLocalMedia(videoEnabled = true) {
     }
 }
 
-async function hangUpCall() {
+async function hangUpGroupCall() {
     if (localStream) {
         localStream.getTracks().forEach(track => track.stop());
     }
-    if (remoteStream) {
-        remoteStream.getTracks().forEach(track => track.stop());
-    }
-    if (pc) {
-        pc.close();
-        pc = null;
+
+    Object.values(peerConnections).forEach(pc => pc.close());
+    peerConnections = {};
+
+    if (currentRoomId && auth.currentUser) {
+        try {
+            await deleteDoc(doc(db, "groupCalls", currentRoomId, "participants", auth.currentUser.uid));
+        } catch (e) {
+            console.error("Error leaving room:", e);
+        }
+        currentRoomId = null;
     }
 
-    if (currentCallId) {
-        try {
-            await deleteDoc(doc(db, "calls", currentCallId));
-        } catch (e) {
-            console.error("Error cleaning call doc:", e);
-        }
-        currentCallId = null;
+    if (videoGrid) {
+        const remotes = videoGrid.querySelectorAll('.remote-video-container');
+        remotes.forEach(el => el.remove());
     }
 
     hideCallModal();
 }
 
 if (hangupButton) {
-    hangupButton.addEventListener('click', hangUpCall);
+    hangupButton.addEventListener('click', hangUpGroupCall);
 }
 
-async function initiateCall(isVideo = true) {
-    await startLocalMedia(isVideo);
+async function joinGroupCall(roomId) {
+    await startLocalMedia();
     showCallModal();
-    if (callStatus) callStatus.textContent = "Calling...";
+    if (callStatus) callStatus.textContent = `Joined room: ${roomId}`;
+    currentRoomId = roomId;
 
-    pc = new RTCPeerConnection(servers);
+    const user = auth.currentUser;
+    if (!user) return;
 
-    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+    const roomRef = doc(db, "groupCalls", roomId);
+    const participantRef = doc(roomRef, "participants", user.uid);
 
-    remoteStream = new MediaStream();
-    if (remoteVideo) remoteVideo.srcObject = remoteStream;
+    await setDoc(participantRef, { uid: user.uid, displayName: currentDisplayName, joinedAt: serverTimestamp() });
 
-    pc.ontrack = (event) => {
-        event.streams[0].getTracks().forEach(track => {
-            remoteStream.addTrack(track);
-        });
-    };
+    const participantsCol = collection(roomRef, "participants");
+    onSnapshot(participantsCol, async (snapshot) => {
+        snapshot.docChanges().forEach(async (change) => {
+            const remoteUser = change.doc.data();
+            if (remoteUser.uid === user.uid) return;
 
-    const callRef = doc(collection(db, "calls"));
-    currentCallId = callRef.id;
-
-    const offerCandidates = collection(callRef, "offerCandidates");
-    const answerCandidates = collection(callRef, "answerCandidates");
-
-    pc.onicecandidate = (event) => {
-        if (event.candidate) {
-            addDoc(offerCandidates, event.candidate.toJSON());
-        }
-    };
-
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-
-    const callWithOffer = {
-        offer: { type: offer.type, sdp: offer.sdp },
-    };
-    await setDoc(callRef, callWithOffer);
-
-    onSnapshot(callRef, (snapshot) => {
-        const data = snapshot.data();
-        if (!pc.currentRemoteDescription && data && data.answer) {
-            const answer = new RTCSessionDescription(data.answer);
-            pc.setRemoteDescription(answer);
-            if (callStatus) callStatus.textContent = "Connected!";
-        }
-    });
-
-    onSnapshot(answerCandidates, (snapshot) => {
-        snapshot.docChanges().forEach((change) => {
             if (change.type === 'added') {
-                const data = change.doc.data();
-                pc.addIceCandidate(new RTCIceCandidate(data));
+                const pc = new RTCPeerConnection(servers);
+                peerConnections[remoteUser.uid] = pc;
+
+                localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+                const remoteStream = new MediaStream();
+                let remoteVideoEl = document.getElementById(`video-${remoteUser.uid}`);
+                if (!remoteVideoEl) {
+                    const container = document.createElement('div');
+                    container.className = 'remote-video-container';
+                    container.style.position = 'relative';
+                    container.innerHTML = `
+                        <video id="video-${remoteUser.uid}" autoplay playsinline style="width: 100%; height: 150px; background: #000; border-radius: 6px; object-fit: cover;"></video>
+                        <span style="position: absolute; bottom: 5px; left: 5px; color: #fff; background: rgba(0,0,0,0.6); padding: 2px 6px; font-size: 11px; border-radius: 4px;">${escapeHtml(remoteUser.displayName)}</span>
+                    `;
+                    videoGrid.appendChild(container);
+                    remoteVideoEl = document.getElementById(`video-${remoteUser.uid}`);
+                }
+                remoteVideoEl.srcObject = remoteStream;
+
+                pc.ontrack = (event) => {
+                    event.streams[0].getTracks().forEach(track => remoteStream.addTrack(track));
+                };
+
+                const offerCandidatesCol = collection(roomRef, "participants", user.uid, "offers", remoteUser.uid, "candidates");
+                pc.onicecandidate = (event) => {
+                    if (event.candidate) {
+                        addDoc(offerCandidatesCol, event.candidate.toJSON());
+                    }
+                };
+
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+
+                const offerDocRef = doc(roomRef, "participants", user.uid, "offers", remoteUser.uid);
+                await setDoc(offerDocRef, { offer: { type: offer.type, sdp: offer.sdp } });
+
+                onSnapshot(offerDocRef, async (docSnap) => {
+                    const data = docSnap.data();
+                    if (data && data.answer && !pc.currentRemoteDescription) {
+                        await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+                    }
+                });
+            } else if (change.type === 'removed') {
+                if (peerConnections[remoteUser.uid]) {
+                    peerConnections[remoteUser.uid].close();
+                    delete peerConnections[remoteUser.uid];
+                }
+                const container = document.getElementById(`video-${remoteUser.uid}`)?.parentElement;
+                if (container) container.remove();
             }
         });
     });
