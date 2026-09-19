@@ -46,28 +46,15 @@
     </div>
 
     <div id="call-modal" class="image-modal hidden" role="dialog" aria-modal="true" aria-label="Group Video Call">
-        <div class="image-modal-content call-modal-box">
-            <div class="call-header">
-                <h3>Group Call Room</h3>
-                <span id="call-status">Connecting...</span>
-            </div>
-            <div id="video-grid" class="video-grid">
-                <div class="video-container">
-                    <video id="local-video" autoplay muted playsinline></video>
-                    <span class="video-name-tag">You</span>
+        <div class="image-modal-content" style="background: #111; padding: 20px; border-radius: 8px; text-align: center; max-width: 800px; width: 100%;">
+            <div id="video-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; justify-content: center; margin-bottom: 15px; max-height: 60vh; overflow-y: auto;">
+                <div style="position: relative;">
+                    <video id="local-video" autoplay muted playsinline style="width: 100%; height: 150px; background: #000; border-radius: 6px; object-fit: cover;"></video>
+                    <span style="position: absolute; bottom: 5px; left: 5px; color: #fff; background: rgba(0,0,0,0.6); padding: 2px 6px; font-size: 11px; border-radius: 4px;">You</span>
                 </div>
             </div>
-            <div class="call-controls">
-                <button id="toggle-audio-btn" type="button" class="call-control-btn" title="Mute/Unmute Audio">
-                    <i class="fa-solid fa-microphone"></i>
-                </button>
-                <button id="toggle-video-btn" type="button" class="call-control-btn" title="Turn Camera On/Off">
-                    <i class="fa-solid fa-video"></i>
-                </button>
-                <button id="hangup-button" type="button" class="call-control-btn danger" title="Leave Room">
-                    <i class="fa-solid fa-phone-slash"></i> Leave
-                </button>
-            </div>
+            <div id="call-status" style="color: #fff; margin-bottom: 15px;">In group call room...</div>
+            <button id="hangup-button" style="background: #b00020; color: #fff; width: auto; padding: 8px 16px;">Leave Room</button>
         </div>
     </div>
 
