@@ -293,6 +293,121 @@ html, body {
     color: #dddddd;
 }
 
+/* Call Modal & Video Grid UI Styling */
+.call-modal-box {
+    background: #18181b;
+    padding: 24px;
+    border-radius: 12px;
+    text-align: center;
+    max-width: 750px;
+    width: 90%;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.call-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: #ffffff;
+    border-bottom: 1px solid #27272a;
+    padding-bottom: 12px;
+}
+
+.call-header h3 {
+    font-size: 16px;
+    margin: 0;
+}
+
+#call-status {
+    font-size: 13px;
+    color: #a1a1aa;
+}
+
+.video-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    justify-content: center;
+    align-items: center;
+    max-height: 55vh;
+    overflow-y: auto;
+    padding: 4px;
+}
+
+.video-container, .remote-video-container {
+    position: relative;
+    background: #09090b;
+    border-radius: 8px;
+    overflow: hidden;
+    aspect-ratio: 16 / 9;
+    border: 1px solid #27272a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.video-container video, .remote-video-container video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.video-name-tag {
+    position: absolute;
+    bottom: 8px;
+    left: 8px;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.65);
+    padding: 2px 8px;
+    font-size: 11px;
+    border-radius: 4px;
+    font-weight: 500;
+}
+
+.call-controls {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    padding-top: 8px;
+    border-top: 1px solid #27272a;
+}
+
+.call-control-btn {
+    background: #27272a;
+    color: #ffffff;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: auto;
+    margin: 0;
+    transition: background 0.2s ease;
+}
+
+.call-control-btn:hover {
+    background: #3f3f46;
+}
+
+.call-control-btn.danger {
+    background: #ef4444;
+}
+
+.call-control-btn.danger:hover {
+    background: #dc2626;
+}
+
+.call-control-btn.muted {
+    background: #71717a;
+    color: #d4d4d8;
+}
+
 .login-container {
     background-color: #ffffff;
     border: 1px solid #e0e0e0;
@@ -354,117 +469,10 @@ button:hover {
     color: #333333;
 }
 
-.auth-tabs {
-    display: flex;
-    margin-bottom: 24px;
-    border-bottom: 1px solid #e0e0e0;
-}
-
-.tab-btn {
-    flex: 1;
-    background: transparent;
-    border: none;
-    border-bottom: 2px solid transparent;
-    padding: 10px;
-    font-family: 'Inter', sans-serif;
-    font-weight: 500;
-    font-size: 14px;
-    color: #777777;
-    cursor: pointer;
-    margin-top: 0;
-    border-radius: 0;
-}
-
-.tab-btn.active {
-    color: #111111;
-    border-bottom-color: #111111;
-    background: transparent;
-}
-
-.tab-btn:hover {
-    background: transparent;
-    color: #111111;
-}
-
-.tab-btn:focus {
-    outline: none;
-    background: #f9f9f9;
-}
-
 .button-group {
     display: flex;
     flex-direction: column;
     gap: 8px;
-}
-
-.dashboard-container {
-    max-width: 600px;
-    margin: 40px auto;
-    padding: 30px;
-    background: #ffffff;
-    border: 1px solid #e0e0e0;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-}
-
-.profile-header {
-    text-align: center;
-    margin-bottom: 20px;
-}
-
-.profile-avatar {
-    width: 100px;
-    height: 100px;
-    aspect-ratio: 1 / 1;
-    border-radius: 50%;
-    object-fit: cover;
-    margin-bottom: 10px;
-    display: inline-block;
-}
-
-.upload-section {
-    margin-top: 20px;
-    border-top: 1px solid #ddd;
-    padding-top: 15px;
-}
-
-.upload-actions {
-    margin-top: 16px;
-}
-
-.hidden {
-    display: none;
-}
-
-.upload-preview {
-    margin: 10px 0;
-}
-
-.upload-preview img {
-    max-width: 120px;
-    max-height: 120px;
-    border-radius: 4px;
-    border: 1px solid #ccc;
-    object-fit: cover;
-}
-
-.upload-status {
-    font-size: 13px;
-    color: #333333;
-    margin: 8px 0;
-    min-height: 18px;
-}
-
-.upload-status.error {
-    color: #b00020;
-}
-
-label[for="profile-pic-input"] {
-    display: block;
-    font-size: 13px;
-    font-weight: 500;
-    margin-bottom: 6px;
-    color: #333333;
 }
 
 .active-users-card {
@@ -492,12 +500,6 @@ label[for="profile-pic-input"] {
     max-height: 180px;
     overflow-y: auto;
     padding-right: 4px;
-}
-
-.active-users-list .empty-state {
-    margin: 4px 0;
-    font-size: 12px;
-    text-align: left;
 }
 
 .active-user-item {
@@ -542,12 +544,10 @@ label[for="profile-pic-input"] {
 
 .status-online {
     background-color: #22c55e;
-    box-shadow: 0 0 4px rgba(34, 197, 94, 0.4);
 }
 
 .status-away {
     background-color: #eab308;
-    box-shadow: 0 0 4px rgba(234, 179, 8, 0.4);
 }
 
 .active-user-name {
