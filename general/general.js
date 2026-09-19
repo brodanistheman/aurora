@@ -83,12 +83,6 @@ function formatMessageText(text) {
     });
 }
 
-function setStatus(el, message, isError = false) {
-    if (!el) return;
-    el.textContent = message || '';
-    el.classList.toggle('error', !!isError);
-}
-
 function applyUserData(userData) {
     if (userData.displayName) {
         currentDisplayName = userData.displayName;
@@ -171,8 +165,15 @@ function initOnlineUsersList() {
                     <img src="${avatar}" class="active-user-avatar" alt="" onerror="this.src='${defaultAvatar}'">
                     <span class="active-user-dot ${statusClass}" title="${statusLabel}"></span>
                 </div>
-                <span class="active-user-name" title="${name}">${name}</span>
+                <span class="active-user-name" title="${name}" style="flex:1; overflow:hidden; text-overflow:ellipsis;">${name}</span>
+                <button class="call-trigger-btn" type="button" style="width: auto; padding: 4px 8px; font-size: 12px; margin: 0;">Call</button>
             `;
+
+            const callBtn = userDiv.querySelector('.call-trigger-btn');
+            callBtn.addEventListener('click', () => {
+                initiateCall(true);
+            });
+
             onlineUsersList.appendChild(userDiv);
         });
 
