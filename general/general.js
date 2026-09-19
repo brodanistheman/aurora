@@ -224,7 +224,6 @@ function initChat() {
         docsToRender.reverse().forEach((msg) => {
             const senderDisplay = escapeHtml(msg.displayName || 'Anonymous');
 
-            // "Call started" card
             if (msg.type === 'call') {
                 const row = document.createElement('div');
                 row.className = 'chat-event';
@@ -411,22 +410,6 @@ if (messageForm) {
     }
 }
 
-/* ==========================================================================
-   Group call
-   ==========================================================================
-   Signaling layout in Firestore:
-
-   groupCalls/{room}/participants/{uid}
-       uid, displayName, profilePic, micOn, camOn, heartbeatMs, joinedAt
-   groupCalls/{room}/calls/{callerUid}_{calleeUid}_{session}
-       from, fromName, to, offer, answer, createdAt
-       /callerCandidates/{auto}
-       /calleeCandidates/{auto}
-
-   A newcomer calls everyone who was already in the room; people already in
-   the room answer. That way every pair has exactly one connection.
-   ========================================================================== */
-
 const CALL_ROOM_ID = 'main-room';
 const HEARTBEAT_MS = 20000;
 const STALE_AFTER_MS = 75000;
@@ -464,8 +447,6 @@ const groupCallButton = document.getElementById('group-call-btn');
 const groupCallLabel = document.getElementById('group-call-label');
 const callPanel = document.getElementById('call-panel');
 const callPanelStatus = document.getElementById('call-panel-status');
-
-/* ---------- Room presence (sidebar button + chat cards) ---------- */
 
 function isFresh(participant) {
     return Date.now() - (participant.heartbeatMs || 0) < STALE_AFTER_MS;
@@ -507,7 +488,6 @@ function renderCallPresence() {
         }
     }
 
-    // Only the most recent call card can be live; older ones are history.
     const cards = document.querySelectorAll('.call-card');
     cards.forEach((card, i) => applyCallCardState(card, live && i === cards.length - 1, count));
 }
@@ -521,7 +501,6 @@ function watchCallRoom() {
         renderCallPresence();
     });
 
-    // Re-evaluate so a participant who vanished without leaving times out.
     setInterval(renderCallPresence, 15000);
 }
 
@@ -548,8 +527,6 @@ async function postCallStartedMessage(roomId) {
 if (groupCallButton) {
     groupCallButton.addEventListener('click', () => joinGroupCall(CALL_ROOM_ID));
 }
-
-/* ---------- Call room UI ---------- */
 
 function showCallModal() {
     if (callModal) callModal.classList.remove('hidden');
@@ -705,8 +682,6 @@ async function startLocalMedia() {
     return true;
 }
 
-/* ---------- Peer connections ---------- */
-
 function removePeer(uid) {
     const pc = peerConnections[uid];
     if (pc) {
@@ -769,7 +744,6 @@ function listenForCandidates(pc, candidatesCol) {
     }));
 }
 
-// Newcomer -> existing participant
 async function callPeer(user, roomRef, remote) {
     const pc = createPeer(remote.uid, remote.displayName);
 
@@ -810,7 +784,6 @@ async function callPeer(user, roomRef, remote) {
     listenForCandidates(pc, calleeCandidates);
 }
 
-// Existing participant <- newcomer
 async function answerCall(callRef, data) {
     const pc = createPeer(data.from, data.fromName);
 
@@ -840,7 +813,6 @@ function listenForCalls(user, roomRef) {
 
             const data = change.doc.data();
             if (!data.offer || data.answer || !data.createdAt) return;
-            // Ignore leftovers from before we joined.
             if (data.createdAt.toMillis() < myJoinedMs) return;
             if (answeredCalls.has(change.doc.id)) return;
             answeredCalls.add(change.doc.id);
@@ -875,8 +847,6 @@ async function deleteCallDoc(callRef) {
     }
     await deleteDoc(callRef);
 }
-
-/* ---------- Join / leave ---------- */
 
 async function joinGroupCall(roomId = CALL_ROOM_ID) {
     const user = auth.currentUser;
@@ -928,7 +898,6 @@ async function joinGroupCall(roomId = CALL_ROOM_ID) {
         listenForParticipants(user, roomRef);
         listenForCalls(user, roomRef);
 
-        // Call everyone who got here before us.
         const existing = await getDocs(collection(roomRef, 'participants'));
         for (const d of existing.docs) {
             const remote = d.data();
@@ -936,7 +905,7 @@ async function joinGroupCall(roomId = CALL_ROOM_ID) {
 
             const remoteJoined = remote.joinedAt && remote.joinedAt.toMillis ? remote.joinedAt.toMillis() : 0;
             const theyJoinedAfterMe = remoteJoined > myJoinedMs || (remoteJoined === myJoinedMs && remote.uid > user.uid);
-            if (theyJoinedAfterMe) continue; // they will call us
+            if (theyJoinedAfterMe) continue;
 
             remoteMedia[remote.uid] = { micOn: remote.micOn !== false, camOn: remote.camOn !== false };
             await callPeer(user, roomRef, remote);
@@ -990,8 +959,6 @@ async function hangUpGroupCall() {
 window.addEventListener('beforeunload', () => {
     if (myParticipantRef) deleteDoc(myParticipantRef);
 });
-
-/* ---------- Auth ---------- */
 
 onAuthStateChanged(auth, async (user) => {
     if (user) {
