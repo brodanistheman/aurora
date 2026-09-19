@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp, getDocs, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, collection, addDoc, query, where, orderBy, limit, onSnapshot, serverTimestamp, getDocs, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-storage.js";
 
 const firebaseConfig = {
@@ -174,17 +174,6 @@ function initOnlineUsersList() {
             onlineUsersList.innerHTML = `<p class="empty-state">No one else is online right now.</p>`;
         }
     });
-
-    const sidebar = document.querySelector('.sidebar');
-    if (sidebar && !document.getElementById('group-call-btn')) {
-        const groupBtn = document.createElement('button');
-        groupBtn.id = 'group-call-btn';
-        groupBtn.type = 'button';
-        groupBtn.textContent = 'Start Group Call';
-        groupBtn.style.marginTop = '10px';
-        groupBtn.addEventListener('click', () => joinGroupCall("main-room"));
-        sidebar.appendChild(groupBtn);
-    }
 }
 
 function openLightbox(imgSrc) {
@@ -225,7 +214,7 @@ function initChat() {
         messageBox.innerHTML = '';
 
         const docsToRender = [];
-        snapshot.forEach((doc) => docsToRender.push(doc.data()));
+        snapshot.forEach((d) => docsToRender.push(d.data()));
 
         if (docsToRender.length === 0) {
             messageBox.innerHTML = `<p class="empty-state">No messages yet. Say hello!</p>`;
@@ -233,10 +222,32 @@ function initChat() {
         }
 
         docsToRender.reverse().forEach((msg) => {
+            const senderDisplay = escapeHtml(msg.displayName || 'Anonymous');
+
+            // "Call started" card
+            if (msg.type === 'call') {
+                const row = document.createElement('div');
+                row.className = 'chat-event';
+                row.innerHTML = `
+                    <div class="call-card">
+                        <div class="call-card-icon"><i class="fa-solid fa-video"></i></div>
+                        <div class="call-card-info">
+                            <span class="call-card-title">${senderDisplay} started a group call</span>
+                            <span class="call-card-sub"></span>
+                        </div>
+                        <button type="button" class="call-card-join">Join</button>
+                    </div>
+                `;
+                row.querySelector('.call-card-join').addEventListener('click', () => {
+                    joinGroupCall(msg.roomId || CALL_ROOM_ID);
+                });
+                messageBox.appendChild(row);
+                return;
+            }
+
             const div = document.createElement('div');
             div.className = 'chat-message';
 
-            const senderDisplay = escapeHtml(msg.displayName || 'Anonymous');
             const senderPic = isSafeImageSrc(msg.profilePic) ? msg.profilePic : defaultAvatar;
 
             let contentHtml = '';
@@ -265,6 +276,8 @@ function initChat() {
         messageBox.querySelectorAll('.clickable-image').forEach((img) => {
             img.addEventListener('click', () => openLightbox(img.src));
         });
+
+        renderCallPresence();
 
         if (shouldStickToBottom) {
             messageBox.scrollTop = messageBox.scrollHeight;
@@ -398,6 +411,26 @@ if (messageForm) {
     }
 }
 
+/* ==========================================================================
+   Group call
+   ==========================================================================
+   Signaling layout in Firestore:
+
+   groupCalls/{room}/participants/{uid}
+       uid, displayName, profilePic, micOn, camOn, heartbeatMs, joinedAt
+   groupCalls/{room}/calls/{callerUid}_{calleeUid}_{session}
+       from, fromName, to, offer, answer, createdAt
+       /callerCandidates/{auto}
+       /calleeCandidates/{auto}
+
+   A newcomer calls everyone who was already in the room; people already in
+   the room answer. That way every pair has exactly one connection.
+   ========================================================================== */
+
+const CALL_ROOM_ID = 'main-room';
+const HEARTBEAT_MS = 20000;
+const STALE_AFTER_MS = 75000;
+
 const servers = {
     iceServers: [
         { urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] }
@@ -407,12 +440,116 @@ const servers = {
 let localStream = null;
 let currentRoomId = null;
 let peerConnections = {};
+let callUnsubs = [];
+let heartbeatTimer = null;
+let myParticipantRef = null;
+let myCallDocRefs = [];
+let myJoinedMs = 0;
+let inCall = false;
+let micOn = true;
+let camOn = true;
+let roomParticipants = [];
+let roomWatchStarted = false;
+const answeredCalls = new Set();
+const remoteMedia = {};
 
 const callModal = document.getElementById('call-modal');
-const localVideo = document.getElementById('local-video');
 const videoGrid = document.getElementById('video-grid');
 const hangupButton = document.getElementById('hangup-button');
+const micButton = document.getElementById('mic-button');
+const camButton = document.getElementById('cam-button');
 const callStatus = document.getElementById('call-status');
+const callCount = document.getElementById('call-count');
+const groupCallButton = document.getElementById('group-call-btn');
+const groupCallLabel = document.getElementById('group-call-label');
+const callPanel = document.getElementById('call-panel');
+const callPanelStatus = document.getElementById('call-panel-status');
+
+/* ---------- Room presence (sidebar button + chat cards) ---------- */
+
+function isFresh(participant) {
+    return Date.now() - (participant.heartbeatMs || 0) < STALE_AFTER_MS;
+}
+
+function freshParticipants() {
+    const myUid = auth.currentUser ? auth.currentUser.uid : null;
+    return roomParticipants.filter((p) => isFresh(p) && (inCall || p.uid !== myUid));
+}
+
+function applyCallCardState(card, live, count) {
+    card.classList.toggle('is-live', live);
+
+    const sub = card.querySelector('.call-card-sub');
+    if (sub) sub.textContent = live ? `${count} in the call` : 'Call ended';
+
+    const joinBtn = card.querySelector('.call-card-join');
+    if (joinBtn) {
+        joinBtn.classList.toggle('hidden', !live);
+        joinBtn.disabled = inCall;
+        joinBtn.textContent = inCall ? 'In call' : 'Join';
+    }
+}
+
+function renderCallPresence() {
+    const count = freshParticipants().length;
+    const live = count > 0;
+
+    if (callPanel) callPanel.classList.toggle('is-live', live);
+    if (callPanelStatus) {
+        callPanelStatus.textContent = live
+            ? `${count} ${count === 1 ? 'person' : 'people'} in the call`
+            : 'No one is in a call';
+    }
+    if (groupCallButton) {
+        groupCallButton.disabled = inCall;
+        if (groupCallLabel) {
+            groupCallLabel.textContent = inCall ? 'In call' : live ? 'Join call' : 'Start group call';
+        }
+    }
+
+    // Only the most recent call card can be live; older ones are history.
+    const cards = document.querySelectorAll('.call-card');
+    cards.forEach((card, i) => applyCallCardState(card, live && i === cards.length - 1, count));
+}
+
+function watchCallRoom() {
+    if (roomWatchStarted) return;
+    roomWatchStarted = true;
+
+    onSnapshot(collection(db, 'groupCalls', CALL_ROOM_ID, 'participants'), (snapshot) => {
+        roomParticipants = snapshot.docs.map((d) => d.data());
+        renderCallPresence();
+    });
+
+    // Re-evaluate so a participant who vanished without leaving times out.
+    setInterval(renderCallPresence, 15000);
+}
+
+async function postCallStartedMessage(roomId) {
+    const user = auth.currentUser;
+    if (!user) return;
+    try {
+        await addDoc(collection(db, 'messages'), {
+            uid: user.uid,
+            displayName: currentDisplayName,
+            profilePic: currentProfilePic,
+            type: 'call',
+            roomId,
+            text: '',
+            imageUrl: null,
+            videoUrl: null,
+            createdAt: serverTimestamp()
+        });
+    } catch (err) {
+        console.error('Error posting call message:', err);
+    }
+}
+
+if (groupCallButton) {
+    groupCallButton.addEventListener('click', () => joinGroupCall(CALL_ROOM_ID));
+}
+
+/* ---------- Call room UI ---------- */
 
 function showCallModal() {
     if (callModal) callModal.classList.remove('hidden');
@@ -422,120 +559,439 @@ function hideCallModal() {
     if (callModal) callModal.classList.add('hidden');
 }
 
+function initials(name) {
+    const parts = String(name || '?').trim().split(/\s+/).filter(Boolean);
+    const text = parts.length > 1 ? parts[0][0] + parts[1][0] : (parts[0] || '?').slice(0, 2);
+    return text.toUpperCase();
+}
+
+function getTile(id) {
+    return videoGrid ? videoGrid.querySelector(`[data-tile-id="${CSS.escape(id)}"]`) : null;
+}
+
+function setTileState(id, state) {
+    const tile = getTile(id);
+    if (!tile) return;
+    tile.classList.toggle('mic-off', state.micOn === false);
+    tile.classList.toggle('cam-off', state.camOn === false);
+}
+
+function updateGrid() {
+    if (!videoGrid) return;
+    const n = videoGrid.querySelectorAll('.video-tile').length;
+    const cols = n <= 1 ? 1 : n <= 4 ? 2 : n <= 9 ? 3 : 4;
+
+    videoGrid.dataset.count = String(n);
+    videoGrid.style.setProperty('--cols', String(cols));
+
+    if (callCount) callCount.textContent = String(Math.max(n, 1));
+    if (callStatus) {
+        callStatus.textContent = n <= 1 ? 'Waiting for others to join' : `${n} people in the call`;
+    }
+}
+
+function buildTile(id, name, isLocal) {
+    const tile = document.createElement('div');
+    tile.className = `video-tile${isLocal ? ' local' : ''}`;
+    tile.dataset.tileId = id;
+
+    const video = document.createElement('video');
+    video.autoplay = true;
+    video.playsInline = true;
+    if (isLocal) video.muted = true;
+
+    const avatar = document.createElement('div');
+    avatar.className = 'tile-avatar';
+    const avatarInitials = document.createElement('span');
+    avatarInitials.textContent = initials(name);
+    avatar.appendChild(avatarInitials);
+
+    const label = document.createElement('div');
+    label.className = 'tile-label';
+    const micIcon = document.createElement('i');
+    micIcon.className = 'fa-solid fa-microphone-slash';
+    const nameEl = document.createElement('span');
+    nameEl.textContent = isLocal ? 'You' : (name || 'Anonymous');
+    label.append(micIcon, nameEl);
+
+    tile.append(video, avatar, label);
+    videoGrid.appendChild(tile);
+    updateGrid();
+
+    return { tile, video };
+}
+
+function ensureRemoteTile(uid, name) {
+    let tile = getTile(uid);
+    if (!tile) {
+        tile = buildTile(uid, name, false).tile;
+        if (remoteMedia[uid]) setTileState(uid, remoteMedia[uid]);
+    }
+    return tile.querySelector('video');
+}
+
+function updateControls() {
+    const hasAudio = !!localStream && localStream.getAudioTracks().length > 0;
+    const hasVideo = !!localStream && localStream.getVideoTracks().length > 0;
+
+    if (micButton) {
+        micButton.disabled = !hasAudio;
+        micButton.classList.toggle('is-off', !micOn);
+        micButton.setAttribute('aria-pressed', String(!micOn));
+        const label = micOn ? 'Mute microphone' : 'Unmute microphone';
+        micButton.setAttribute('aria-label', label);
+        micButton.title = label;
+        micButton.querySelector('i').className = micOn ? 'fa-solid fa-microphone' : 'fa-solid fa-microphone-slash';
+    }
+
+    if (camButton) {
+        camButton.disabled = !hasVideo;
+        camButton.classList.toggle('is-off', !camOn);
+        camButton.setAttribute('aria-pressed', String(!camOn));
+        const label = camOn ? 'Turn off camera' : 'Turn on camera';
+        camButton.setAttribute('aria-label', label);
+        camButton.title = label;
+        camButton.querySelector('i').className = camOn ? 'fa-solid fa-video' : 'fa-solid fa-video-slash';
+    }
+
+    setTileState('local', { micOn, camOn });
+}
+
+function publishMediaState() {
+    if (!myParticipantRef) return;
+    updateDoc(myParticipantRef, { micOn, camOn }).catch((err) => console.error('Error sharing mic/camera state:', err));
+}
+
+function toggleMic() {
+    if (!localStream) return;
+    const tracks = localStream.getAudioTracks();
+    if (!tracks.length) return;
+    micOn = !micOn;
+    tracks.forEach((t) => { t.enabled = micOn; });
+    updateControls();
+    publishMediaState();
+}
+
+function toggleCamera() {
+    if (!localStream) return;
+    const tracks = localStream.getVideoTracks();
+    if (!tracks.length) return;
+    camOn = !camOn;
+    tracks.forEach((t) => { t.enabled = camOn; });
+    updateControls();
+    publishMediaState();
+}
+
+if (micButton) micButton.addEventListener('click', toggleMic);
+if (camButton) camButton.addEventListener('click', toggleCamera);
+if (hangupButton) hangupButton.addEventListener('click', hangUpGroupCall);
+
 async function startLocalMedia() {
     try {
         localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        if (localVideo) localVideo.srcObject = localStream;
     } catch (err) {
-        console.error("Error accessing media devices.", err);
-        alert("Could not access camera/microphone.");
+        console.error('Camera + mic unavailable, trying mic only.', err);
+        try {
+            localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        } catch (err2) {
+            console.error('Error accessing media devices.', err2);
+            alert('Could not access your camera or microphone. Check your browser permissions and try again.');
+            return false;
+        }
+    }
+
+    micOn = localStream.getAudioTracks().length > 0;
+    camOn = localStream.getVideoTracks().length > 0;
+    return true;
+}
+
+/* ---------- Peer connections ---------- */
+
+function removePeer(uid) {
+    const pc = peerConnections[uid];
+    if (pc) {
+        pc.onicecandidate = null;
+        pc.ontrack = null;
+        pc.close();
+        delete peerConnections[uid];
+    }
+    const tile = getTile(uid);
+    if (tile) {
+        const video = tile.querySelector('video');
+        if (video) video.srcObject = null;
+        tile.remove();
+    }
+    updateGrid();
+}
+
+function createPeer(remoteUid, remoteName) {
+    removePeer(remoteUid);
+
+    const pc = new RTCPeerConnection(servers);
+    peerConnections[remoteUid] = pc;
+
+    localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
+
+    const remoteStream = new MediaStream();
+    ensureRemoteTile(remoteUid, remoteName).srcObject = remoteStream;
+
+    pc.ontrack = (event) => {
+        if (!remoteStream.getTracks().includes(event.track)) {
+            remoteStream.addTrack(event.track);
+        }
+    };
+
+    return pc;
+}
+
+function addRemoteCandidate(pc, candidateData) {
+    const candidate = new RTCIceCandidate(candidateData);
+    if (pc.remoteDescription) {
+        pc.addIceCandidate(candidate).catch(() => {});
+    } else {
+        (pc._pendingCandidates = pc._pendingCandidates || []).push(candidate);
+    }
+}
+
+async function flushCandidates(pc) {
+    const pending = pc._pendingCandidates || [];
+    pc._pendingCandidates = [];
+    for (const candidate of pending) {
+        await pc.addIceCandidate(candidate).catch(() => {});
+    }
+}
+
+function listenForCandidates(pc, candidatesCol) {
+    callUnsubs.push(onSnapshot(candidatesCol, (snapshot) => {
+        snapshot.docChanges().forEach((change) => {
+            if (change.type === 'added') addRemoteCandidate(pc, change.doc.data());
+        });
+    }));
+}
+
+// Newcomer -> existing participant
+async function callPeer(user, roomRef, remote) {
+    const pc = createPeer(remote.uid, remote.displayName);
+
+    const callRef = doc(roomRef, 'calls', `${user.uid}_${remote.uid}_${myJoinedMs}`);
+    myCallDocRefs.push(callRef);
+    const callerCandidates = collection(callRef, 'callerCandidates');
+    const calleeCandidates = collection(callRef, 'calleeCandidates');
+
+    pc.onicecandidate = (event) => {
+        if (event.candidate) {
+            addDoc(callerCandidates, event.candidate.toJSON()).catch((err) => console.error(err));
+        }
+    };
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    await setDoc(callRef, {
+        from: user.uid,
+        fromName: currentDisplayName,
+        to: remote.uid,
+        offer: { type: offer.type, sdp: offer.sdp },
+        answer: null,
+        createdAt: serverTimestamp()
+    });
+
+    callUnsubs.push(onSnapshot(callRef, async (snap) => {
+        const data = snap.data();
+        if (data && data.answer && !pc.currentRemoteDescription) {
+            try {
+                await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+                await flushCandidates(pc);
+            } catch (err) {
+                console.error('Error applying answer:', err);
+            }
+        }
+    }));
+
+    listenForCandidates(pc, calleeCandidates);
+}
+
+// Existing participant <- newcomer
+async function answerCall(callRef, data) {
+    const pc = createPeer(data.from, data.fromName);
+
+    const callerCandidates = collection(callRef, 'callerCandidates');
+    const calleeCandidates = collection(callRef, 'calleeCandidates');
+
+    pc.onicecandidate = (event) => {
+        if (event.candidate) {
+            addDoc(calleeCandidates, event.candidate.toJSON()).catch((err) => console.error(err));
+        }
+    };
+
+    await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    await updateDoc(callRef, { answer: { type: answer.type, sdp: answer.sdp } });
+
+    listenForCandidates(pc, callerCandidates);
+}
+
+function listenForCalls(user, roomRef) {
+    const incoming = query(collection(roomRef, 'calls'), where('to', '==', user.uid));
+
+    callUnsubs.push(onSnapshot(incoming, (snapshot) => {
+        snapshot.docChanges().forEach((change) => {
+            if (change.type === 'removed') return;
+
+            const data = change.doc.data();
+            if (!data.offer || data.answer || !data.createdAt) return;
+            // Ignore leftovers from before we joined.
+            if (data.createdAt.toMillis() < myJoinedMs) return;
+            if (answeredCalls.has(change.doc.id)) return;
+            answeredCalls.add(change.doc.id);
+
+            answerCall(change.doc.ref, data).catch((err) => console.error('Error answering call:', err));
+        });
+    }));
+}
+
+function listenForParticipants(user, roomRef) {
+    callUnsubs.push(onSnapshot(collection(roomRef, 'participants'), (snapshot) => {
+        snapshot.docChanges().forEach((change) => {
+            const p = change.doc.data();
+            if (!p.uid || p.uid === user.uid) return;
+
+            if (change.type === 'removed') {
+                delete remoteMedia[p.uid];
+                removePeer(p.uid);
+                return;
+            }
+
+            remoteMedia[p.uid] = { micOn: p.micOn !== false, camOn: p.camOn !== false };
+            setTileState(p.uid, remoteMedia[p.uid]);
+        });
+    }));
+}
+
+async function deleteCallDoc(callRef) {
+    for (const name of ['callerCandidates', 'calleeCandidates']) {
+        const snap = await getDocs(collection(callRef, name));
+        await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+    }
+    await deleteDoc(callRef);
+}
+
+/* ---------- Join / leave ---------- */
+
+async function joinGroupCall(roomId = CALL_ROOM_ID) {
+    const user = auth.currentUser;
+    if (!user || inCall) return;
+
+    inCall = true;
+    renderCallPresence();
+
+    if (!(await startLocalMedia())) {
+        inCall = false;
+        renderCallPresence();
+        return;
+    }
+
+    const wasEmpty = freshParticipants().length === 0;
+    currentRoomId = roomId;
+    answeredCalls.clear();
+
+    showCallModal();
+    buildTile('local', currentDisplayName, true).video.srcObject = localStream;
+    updateControls();
+
+    try {
+        const roomRef = doc(db, 'groupCalls', roomId);
+        myParticipantRef = doc(roomRef, 'participants', user.uid);
+
+        await setDoc(myParticipantRef, {
+            uid: user.uid,
+            displayName: currentDisplayName,
+            profilePic: currentProfilePic,
+            micOn,
+            camOn,
+            heartbeatMs: Date.now(),
+            joinedAt: serverTimestamp()
+        });
+
+        const joined = await getDoc(myParticipantRef);
+        const joinedAt = joined.data() && joined.data().joinedAt;
+        myJoinedMs = joinedAt && joinedAt.toMillis ? joinedAt.toMillis() : Date.now();
+
+        heartbeatTimer = setInterval(() => {
+            if (myParticipantRef) {
+                updateDoc(myParticipantRef, { heartbeatMs: Date.now() }).catch(() => {});
+            }
+        }, HEARTBEAT_MS);
+
+        if (wasEmpty) postCallStartedMessage(roomId);
+
+        listenForParticipants(user, roomRef);
+        listenForCalls(user, roomRef);
+
+        // Call everyone who got here before us.
+        const existing = await getDocs(collection(roomRef, 'participants'));
+        for (const d of existing.docs) {
+            const remote = d.data();
+            if (remote.uid === user.uid || !isFresh(remote)) continue;
+
+            const remoteJoined = remote.joinedAt && remote.joinedAt.toMillis ? remote.joinedAt.toMillis() : 0;
+            const theyJoinedAfterMe = remoteJoined > myJoinedMs || (remoteJoined === myJoinedMs && remote.uid > user.uid);
+            if (theyJoinedAfterMe) continue; // they will call us
+
+            remoteMedia[remote.uid] = { micOn: remote.micOn !== false, camOn: remote.camOn !== false };
+            await callPeer(user, roomRef, remote);
+        }
+    } catch (err) {
+        console.error('Error joining call:', err);
+        alert('Could not join the call. Please try again.');
+        await hangUpGroupCall();
     }
 }
 
 async function hangUpGroupCall() {
+    if (!inCall) return;
+    inCall = false;
+
+    const participantRef = myParticipantRef;
+    const callRefs = myCallDocRefs;
+    myParticipantRef = null;
+    myCallDocRefs = [];
+
+    callUnsubs.forEach((unsub) => unsub());
+    callUnsubs = [];
+
+    if (heartbeatTimer) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
+    }
+
+    Object.keys(peerConnections).forEach(removePeer);
+
     if (localStream) {
-        localStream.getTracks().forEach(track => track.stop());
+        localStream.getTracks().forEach((track) => track.stop());
+        localStream = null;
     }
 
-    Object.values(peerConnections).forEach(pc => pc.close());
-    peerConnections = {};
-
-    if (currentRoomId && auth.currentUser) {
-        try {
-            await deleteDoc(doc(db, "groupCalls", currentRoomId, "participants", auth.currentUser.uid));
-        } catch (e) {
-            console.error("Error leaving room:", e);
-        }
-        currentRoomId = null;
-    }
-
-    if (videoGrid) {
-        const remotes = videoGrid.querySelectorAll('.remote-video-container');
-        remotes.forEach(el => el.remove());
-    }
-
+    Object.keys(remoteMedia).forEach((uid) => delete remoteMedia[uid]);
+    if (videoGrid) videoGrid.innerHTML = '';
+    updateGrid();
     hideCallModal();
+    currentRoomId = null;
+    renderCallPresence();
+
+    try {
+        if (participantRef) await deleteDoc(participantRef);
+        await Promise.all(callRefs.map(deleteCallDoc));
+    } catch (err) {
+        console.error('Error leaving room:', err);
+    }
 }
 
-if (hangupButton) {
-    hangupButton.addEventListener('click', hangUpGroupCall);
-}
+window.addEventListener('beforeunload', () => {
+    if (myParticipantRef) deleteDoc(myParticipantRef);
+});
 
-async function joinGroupCall(roomId) {
-    await startLocalMedia();
-    showCallModal();
-    if (callStatus) callStatus.textContent = `Joined room: ${roomId}`;
-    currentRoomId = roomId;
-
-    const user = auth.currentUser;
-    if (!user) return;
-
-    const roomRef = doc(db, "groupCalls", roomId);
-    const participantRef = doc(roomRef, "participants", user.uid);
-
-    await setDoc(participantRef, { uid: user.uid, displayName: currentDisplayName, joinedAt: serverTimestamp() });
-
-    const participantsCol = collection(roomRef, "participants");
-    onSnapshot(participantsCol, async (snapshot) => {
-        snapshot.docChanges().forEach(async (change) => {
-            const remoteUser = change.doc.data();
-            if (remoteUser.uid === user.uid) return;
-
-            if (change.type === 'added') {
-                const pc = new RTCPeerConnection(servers);
-                peerConnections[remoteUser.uid] = pc;
-
-                localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-
-                const remoteStream = new MediaStream();
-                let remoteVideoEl = document.getElementById(`video-${remoteUser.uid}`);
-                if (!remoteVideoEl) {
-                    const container = document.createElement('div');
-                    container.className = 'remote-video-container';
-                    container.style.position = 'relative';
-                    container.innerHTML = `
-                        <video id="video-${remoteUser.uid}" autoplay playsinline style="width: 100%; height: 150px; background: #000; border-radius: 6px; object-fit: cover;"></video>
-                        <span style="position: absolute; bottom: 5px; left: 5px; color: #fff; background: rgba(0,0,0,0.6); padding: 2px 6px; font-size: 11px; border-radius: 4px;">${escapeHtml(remoteUser.displayName)}</span>
-                    `;
-                    videoGrid.appendChild(container);
-                    remoteVideoEl = document.getElementById(`video-${remoteUser.uid}`);
-                }
-                remoteVideoEl.srcObject = remoteStream;
-
-                pc.ontrack = (event) => {
-                    event.streams[0].getTracks().forEach(track => remoteStream.addTrack(track));
-                };
-
-                const offerCandidatesCol = collection(roomRef, "participants", user.uid, "offers", remoteUser.uid, "candidates");
-                pc.onicecandidate = (event) => {
-                    if (event.candidate) {
-                        addDoc(offerCandidatesCol, event.candidate.toJSON());
-                    }
-                };
-
-                const offer = await pc.createOffer();
-                await pc.setLocalDescription(offer);
-
-                const offerDocRef = doc(roomRef, "participants", user.uid, "offers", remoteUser.uid);
-                await setDoc(offerDocRef, { offer: { type: offer.type, sdp: offer.sdp } });
-
-                onSnapshot(offerDocRef, async (docSnap) => {
-                    const data = docSnap.data();
-                    if (data && data.answer && !pc.currentRemoteDescription) {
-                        await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-                    }
-                });
-            } else if (change.type === 'removed') {
-                if (peerConnections[remoteUser.uid]) {
-                    peerConnections[remoteUser.uid].close();
-                    delete peerConnections[remoteUser.uid];
-                }
-                const container = document.getElementById(`video-${remoteUser.uid}`)?.parentElement;
-                if (container) container.remove();
-            }
-        });
-    });
-}
+/* ---------- Auth ---------- */
 
 onAuthStateChanged(auth, async (user) => {
     if (user) {
@@ -573,6 +1029,7 @@ onAuthStateChanged(auth, async (user) => {
         setupPresence(user);
         initOnlineUsersList();
         initChat();
+        watchCallRoom();
     } else {
         localStorage.removeItem('aurora_quick_id');
         window.location.href = '../';
@@ -582,6 +1039,7 @@ onAuthStateChanged(auth, async (user) => {
 if (logoutButton) {
     logoutButton.addEventListener('click', async () => {
         const user = auth.currentUser;
+        await hangUpGroupCall();
         if (user) {
             await setDoc(doc(db, "status", user.uid), { status: 'offline', lastChanged: serverTimestamp() }, { merge: true });
         }
