@@ -204,6 +204,60 @@ function isScrolledNearBottom(el) {
     return el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_NEAR_BOTTOM_PX;
 }
 
+/* ------------------------------------------------------------------ */
+/* Reply feature                                                       */
+/* ------------------------------------------------------------------ */
+
+let replyTarget = null;
+
+const replyBanner = document.getElementById('reply-banner');
+const replyBannerName = document.getElementById('reply-banner-name');
+const replyBannerSnippet = document.getElementById('reply-banner-snippet');
+const replyCancelButton = document.getElementById('reply-cancel');
+
+function makeSnippet(msg) {
+    const text = (msg.text || '').trim();
+    if (text) return text.length > 80 ? `${text.slice(0, 80)}…` : text;
+    if (msg.imageUrl) return 'Image';
+    if (msg.videoUrl) return 'Video';
+    return '';
+}
+
+function setReplyTarget(msg) {
+    replyTarget = {
+        id: msg.id,
+        displayName: msg.displayName || 'Anonymous',
+        snippet: makeSnippet(msg)
+    };
+    if (replyBannerName) replyBannerName.textContent = replyTarget.displayName;
+    if (replyBannerSnippet) replyBannerSnippet.textContent = replyTarget.snippet;
+    if (replyBanner) replyBanner.classList.remove('hidden');
+    if (messageInput) messageInput.focus();
+}
+
+function clearReply() {
+    replyTarget = null;
+    if (replyBanner) replyBanner.classList.add('hidden');
+}
+
+function jumpToMessage(id) {
+    if (!messageBox) return;
+    const target = messageBox.querySelector(`[data-message-id="${CSS.escape(id)}"]`);
+    if (!target) return;
+    target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    target.classList.add('is-highlighted');
+    setTimeout(() => target.classList.remove('is-highlighted'), 1500);
+}
+
+if (replyCancelButton) replyCancelButton.addEventListener('click', clearReply);
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && replyTarget && document.activeElement === messageInput) clearReply();
+});
+
+/* ------------------------------------------------------------------ */
+/* Chat                                                                */
+/* ------------------------------------------------------------------ */
+
 function initChat() {
     const q = query(collection(db, "messages"), orderBy("createdAt", "desc"), limit(30));
 
@@ -214,7 +268,7 @@ function initChat() {
         messageBox.innerHTML = '';
 
         const docsToRender = [];
-        snapshot.forEach((d) => docsToRender.push(d.data()));
+        snapshot.forEach((d) => docsToRender.push({ id: d.id, ...d.data() }));
 
         if (docsToRender.length === 0) {
             messageBox.innerHTML = `<p class="empty-state">No messages yet. Say hello!</p>`;
@@ -246,6 +300,7 @@ function initChat() {
 
             const div = document.createElement('div');
             div.className = 'chat-message';
+            div.dataset.messageId = msg.id;
 
             const senderPic = isSafeImageSrc(msg.profilePic) ? msg.profilePic : defaultAvatar;
 
@@ -260,15 +315,33 @@ function initChat() {
                 contentHtml += `<div style="margin-top: 6px;"><video src="${msg.videoUrl}" class="chat-message-video" controls preload="metadata"></video></div>`;
             }
 
+            let quoteHtml = '';
+            if (msg.replyTo && msg.replyTo.id) {
+                quoteHtml = `
+                    <button type="button" class="chat-reply-quote">
+                        <strong>${escapeHtml(msg.replyTo.displayName || 'Anonymous')}</strong>
+                        <span>${escapeHtml(msg.replyTo.snippet || 'Original message')}</span>
+                    </button>`;
+            }
+
             div.innerHTML = `
                 <img src="${senderPic}" alt="" class="chat-profile-pic" onerror="this.src='${defaultAvatar}'">
                 <div class="chat-message-content">
+                    ${quoteHtml}
                     <div class="chat-message-header">
                         <span class="chat-sender-name">${senderDisplay}</span>
+                        <button type="button" class="chat-reply-btn" title="Reply" aria-label="Reply to ${senderDisplay}">
+                            <i class="fa-solid fa-reply"></i>
+                        </button>
                     </div>
                     <div class="chat-message-body">${contentHtml}</div>
                 </div>
             `;
+
+            div.querySelector('.chat-reply-btn').addEventListener('click', () => setReplyTarget(msg));
+            const quote = div.querySelector('.chat-reply-quote');
+            if (quote) quote.addEventListener('click', () => jumpToMessage(msg.replyTo.id));
+
             messageBox.appendChild(div);
         });
 
@@ -325,9 +398,11 @@ async function sendChatMessage(text, attachment = null) {
             text: text || '',
             imageUrl: attachment && attachment.type === 'image' ? attachment.url : null,
             videoUrl: attachment && attachment.type === 'video' ? attachment.url : null,
+            replyTo: replyTarget ? { ...replyTarget } : null,
             createdAt: serverTimestamp()
         });
         messageInput.value = '';
+        clearReply();
         if (imageInput) imageInput.value = '';
     } catch (error) {
         console.error("Error sending message: ", error);
@@ -410,6 +485,10 @@ if (messageForm) {
     }
 }
 
+/* ------------------------------------------------------------------ */
+/* Group call                                                          */
+/* ------------------------------------------------------------------ */
+
 const CALL_ROOM_ID = 'main-room';
 const HEARTBEAT_MS = 20000;
 const STALE_AFTER_MS = 75000;
@@ -430,7 +509,8 @@ let myCallDocRefs = [];
 let myJoinedMs = 0;
 let inCall = false;
 let micOn = true;
-let camOn = true;
+let camOn = false;
+let camBusy = false;
 let roomParticipants = [];
 let roomWatchStarted = false;
 const answeredCalls = new Set();
@@ -550,10 +630,8 @@ function setTileState(id, state) {
 function updateGrid() {
     if (!videoGrid) return;
     const n = videoGrid.querySelectorAll('.video-tile').length;
-    const cols = n <= 1 ? 1 : n <= 4 ? 2 : n <= 9 ? 3 : 4;
 
     videoGrid.dataset.count = String(n);
-    videoGrid.style.setProperty('--cols', String(cols));
 
     if (callCount) callCount.textContent = String(Math.max(n, 1));
     if (callStatus) {
@@ -905,7 +983,7 @@ function stopAllSpeaking() {
 
 function updateControls() {
     const hasAudio = !!localStream && localStream.getAudioTracks().length > 0;
-    const hasVideo = !!localStream && localStream.getVideoTracks().length > 0;
+    camOn = !!localStream && localStream.getVideoTracks().length > 0;
 
     if (micButton) {
         micButton.disabled = !hasAudio;
@@ -918,7 +996,7 @@ function updateControls() {
     }
 
     if (camButton) {
-        camButton.disabled = !hasVideo;
+        camButton.disabled = !localStream || camBusy;
         camButton.classList.toggle('is-off', !camOn);
         camButton.setAttribute('aria-pressed', String(!camOn));
         const label = camOn ? 'Turn off camera' : 'Turn on camera';
@@ -945,14 +1023,62 @@ function toggleMic() {
     publishMediaState();
 }
 
-function toggleCamera() {
-    if (!localStream) return;
-    const tracks = localStream.getVideoTracks();
-    if (!tracks.length) return;
-    camOn = !camOn;
-    tracks.forEach((t) => { t.enabled = camOn; });
+/* Camera is off by default. It is only requested when the user turns it on,
+   and released completely (camera light off) when they turn it off. */
+
+async function setOutgoingVideo(track) {
+    await Promise.all(Object.values(peerConnections).map(async (pc) => {
+        const transceiver = pc.getTransceivers().find(
+            (t) => !t.stopped && t.receiver.track && t.receiver.track.kind === 'video'
+        );
+        if (!transceiver) return;
+        try {
+            await transceiver.sender.replaceTrack(track);
+            if (track) tuneSenders(pc);
+        } catch (err) {
+            console.warn('Could not swap video track:', err);
+        }
+    }));
+}
+
+async function startCamera() {
+    let camStream;
+    try {
+        camStream = await navigator.mediaDevices.getUserMedia({ video: VIDEO_CONSTRAINTS });
+    } catch (err) {
+        console.error('Camera unavailable.', err);
+        alert('Could not access your camera. Check your browser permissions (the lock icon in the address bar) and try again.');
+        return false;
+    }
+    const track = camStream.getVideoTracks()[0];
+    localStream.addTrack(track);
+    await setOutgoingVideo(track);
+    return true;
+}
+
+async function stopCamera() {
+    localStream.getVideoTracks().forEach((t) => {
+        t.stop();
+        localStream.removeTrack(t);
+    });
+    await setOutgoingVideo(null);
+}
+
+async function toggleCamera() {
+    if (!localStream || camBusy) return;
+    camBusy = true;
     updateControls();
-    publishMediaState();
+    try {
+        if (camOn) {
+            await stopCamera();
+        } else {
+            await startCamera();
+        }
+    } finally {
+        camBusy = false;
+        updateControls();
+        publishMediaState();
+    }
 }
 
 if (micButton) micButton.addEventListener('click', toggleMic);
@@ -974,20 +1100,15 @@ const VIDEO_CONSTRAINTS = {
 
 async function startLocalMedia() {
     try {
-        localStream = await navigator.mediaDevices.getUserMedia({ video: VIDEO_CONSTRAINTS, audio: AUDIO_CONSTRAINTS });
+        localStream = await navigator.mediaDevices.getUserMedia({ audio: AUDIO_CONSTRAINTS });
     } catch (err) {
-        console.error('Camera + mic unavailable, trying mic only.', err);
-        try {
-            localStream = await navigator.mediaDevices.getUserMedia({ audio: AUDIO_CONSTRAINTS });
-        } catch (err2) {
-            console.error('Error accessing media devices.', err2);
-            alert('Could not access your camera or microphone. Check your browser permissions and try again.');
-            return false;
-        }
+        console.error('Error accessing microphone.', err);
+        alert('Could not access your microphone. Check your browser permissions (the lock icon in the address bar) and try again.');
+        return false;
     }
 
-    micOn = localStream.getAudioTracks().length > 0;
-    camOn = localStream.getVideoTracks().length > 0;
+    micOn = true;
+    camOn = false;
     return true;
 }
 
@@ -1010,13 +1131,19 @@ function removePeer(uid) {
     updateGrid();
 }
 
-function createPeer(remoteUid, remoteName) {
+function createPeer(remoteUid, remoteName, isCaller = false) {
     removePeer(remoteUid);
 
     const pc = new RTCPeerConnection(servers);
     peerConnections[remoteUid] = pc;
 
     localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
+
+    // Reserve a video slot in the offer so the camera can be attached later
+    // with replaceTrack() and no renegotiation.
+    if (isCaller && !localStream.getVideoTracks().length) {
+        pc.addTransceiver('video', { direction: 'sendrecv' });
+    }
 
     const remoteStream = new MediaStream();
     ensureRemoteTile(remoteUid, remoteName).srcObject = remoteStream;
@@ -1085,7 +1212,7 @@ function listenForCandidates(pc, candidatesCol) {
 }
 
 async function callPeer(user, roomRef, remote) {
-    const pc = createPeer(remote.uid, remote.displayName);
+    const pc = createPeer(remote.uid, remote.displayName, true);
 
     const callRef = doc(roomRef, 'calls', `${user.uid}_${remote.uid}_${myJoinedMs}`);
     myCallDocRefs.push(callRef);
@@ -1125,7 +1252,7 @@ async function callPeer(user, roomRef, remote) {
 }
 
 async function answerCall(callRef, data) {
-    const pc = createPeer(data.from, data.fromName);
+    const pc = createPeer(data.from, data.fromName, false);
 
     const callerCandidates = collection(callRef, 'callerCandidates');
     const calleeCandidates = collection(callRef, 'calleeCandidates');
@@ -1137,6 +1264,15 @@ async function answerCall(callRef, data) {
     };
 
     await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+
+    // The video slot created from the caller's offer is receive-only by default.
+    // Make it send/receive so our camera can be attached later without renegotiating.
+    pc.getTransceivers().forEach((t) => {
+        if (t.receiver.track && t.receiver.track.kind === 'video' && t.direction === 'recvonly') {
+            t.direction = 'sendrecv';
+        }
+    });
+
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
     await updateDoc(callRef, { answer: { type: answer.type, sdp: answer.sdp } });
@@ -1285,6 +1421,9 @@ async function hangUpGroupCall() {
         localStream = null;
     }
 
+    camOn = false;
+    camBusy = false;
+
     Object.keys(remoteMedia).forEach((uid) => delete remoteMedia[uid]);
     if (videoGrid) videoGrid.innerHTML = '';
     updateGrid();
@@ -1303,6 +1442,10 @@ async function hangUpGroupCall() {
 window.addEventListener('beforeunload', () => {
     if (myParticipantRef) deleteDoc(myParticipantRef);
 });
+
+/* ------------------------------------------------------------------ */
+/* Auth                                                                */
+/* ------------------------------------------------------------------ */
 
 onAuthStateChanged(auth, async (user) => {
     if (user) {

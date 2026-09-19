@@ -242,6 +242,133 @@ html, body {
     background: #000;
 }
 
+/* ---------- Reply UI ---------- */
+
+.reply-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    padding: 8px 10px;
+    background: #f4f4f9;
+    border: 1px solid #e0e0e0;
+    border-left: 3px solid var(--accent);
+    border-radius: 6px;
+    font-size: 13px;
+}
+
+.reply-banner.hidden {
+    display: none;
+}
+
+.reply-banner-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.reply-banner-label {
+    color: #52525b;
+}
+
+.reply-banner-label strong {
+    color: #111111;
+}
+
+#reply-banner-snippet {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #71717a;
+}
+
+.reply-banner-close {
+    flex: none;
+    width: 28px;
+    height: 28px;
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    color: #52525b;
+    border: 0;
+    font-size: 20px;
+    line-height: 1;
+}
+
+.reply-banner-close:hover {
+    background: #e4e4e7;
+    color: #111111;
+}
+
+.chat-reply-btn {
+    width: auto;
+    margin: 0 0 0 auto;
+    padding: 2px 8px;
+    background: transparent;
+    color: #71717a;
+    border: 1px solid transparent;
+    font-size: 12px;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.chat-message:hover .chat-reply-btn,
+.chat-reply-btn:focus-visible {
+    opacity: 1;
+}
+
+.chat-reply-btn:hover {
+    background: #e4e4e7;
+    color: #111111;
+}
+
+@media (hover: none) {
+    .chat-reply-btn {
+        opacity: 1;
+    }
+}
+
+.chat-reply-quote {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    width: auto;
+    max-width: 100%;
+    margin: 0 0 4px;
+    padding: 2px 8px;
+    background: transparent;
+    color: #52525b;
+    border: 0;
+    border-left: 3px solid #d4d4d8;
+    border-radius: 0;
+    font-size: 12px;
+    text-align: left;
+}
+
+.chat-reply-quote:hover {
+    background: #ececf1;
+    color: #111111;
+}
+
+.chat-reply-quote strong {
+    font-weight: 600;
+}
+
+.chat-reply-quote span {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.chat-message.is-highlighted {
+    background: #eef2ff;
+}
+
+/* ---------- Image lightbox ---------- */
+
 .image-modal {
     position: fixed;
     z-index: 9999;
@@ -605,6 +732,10 @@ label[for="profile-pic-input"] {
     }
 }
 
+/* ================================================================== */
+/* Group call                                                          */
+/* ================================================================== */
+
 :root {
     --call-accent: #047857;
     --call-accent-hover: #065f46;
@@ -776,16 +907,17 @@ label[for="profile-pic-input"] {
     display: none;
 }
 
+/* Floating call window (no full-screen backdrop, so the chat stays usable).
+   Note: don't add backdrop-filter / transform here, either would make the
+   fixed-position tile menu position itself relative to this box. */
 .call-modal {
     position: fixed;
-    inset: 0;
+    top: 20px;
+    right: 20px;
     z-index: 9999;
     display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-    background: rgba(10, 12, 20, 0.72);
-    backdrop-filter: blur(6px);
+    width: min(520px, calc(100vw - 40px));
+    height: min(480px, calc(100vh - 40px));
 }
 
 .call-modal.hidden {
@@ -795,14 +927,14 @@ label[for="profile-pic-input"] {
 .call-window {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 14px;
     width: 100%;
-    max-width: 1040px;
-    max-height: 100%;
-    padding: 24px;
+    height: 100%;
+    min-height: 0;
+    padding: 16px;
     background: var(--call-stage);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 20px;
+    border-radius: 16px;
     box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
     color: #f1f3f9;
 }
@@ -861,14 +993,16 @@ label[for="profile-pic-input"] {
     color: #e5e8f2;
 }
 
+/* Grid: auto-fit columns, each tile keeps a 16:9 shape and a minimum size.
+   Extra rows scroll instead of squashing the tiles. */
 .video-grid {
-    --cols: 1;
     flex: 1;
     min-height: 0;
     display: grid;
-    grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--tile-min, 200px)), 1fr));
+    grid-auto-rows: auto;
     align-content: start;
-    gap: 12px;
+    gap: 10px;
     overflow-y: auto;
     scrollbar-width: thin;
     scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
@@ -876,12 +1010,14 @@ label[for="profile-pic-input"] {
 
 .video-grid[data-count="0"],
 .video-grid[data-count="1"] {
-    grid-template-columns: minmax(0, 720px);
+    grid-template-columns: minmax(0, 480px);
     justify-content: center;
 }
 
 .video-tile {
     position: relative;
+    min-width: 0;
+    min-height: 112px;
     aspect-ratio: 16 / 9;
     overflow: hidden;
     background: var(--call-tile);
@@ -889,7 +1025,10 @@ label[for="profile-pic-input"] {
     border-radius: 14px;
 }
 
+/* The video is taken out of flow so it can't push the tile taller than 16:9 */
 .video-tile video {
+    position: absolute;
+    inset: 0;
     display: block;
     width: 100%;
     height: 100%;
@@ -928,12 +1067,18 @@ label[for="profile-pic-input"] {
 
 .tile-avatar img {
     display: block;
-    width: 88px;
-    height: 88px;
+    width: 64px;
+    height: 64px;
     border-radius: 50%;
     object-fit: cover;
     background: #2b2f4a;
     transition: box-shadow 0.12s ease;
+}
+
+.video-grid[data-count="0"] .tile-avatar img,
+.video-grid[data-count="1"] .tile-avatar img {
+    width: 88px;
+    height: 88px;
 }
 
 .video-tile::after {
@@ -1050,22 +1195,21 @@ label[for="profile-pic-input"] {
     }
 
     .call-modal {
-        padding: 12px;
+        top: 8px;
+        left: 8px;
+        right: 8px;
+        width: auto;
+        height: min(70vh, 480px);
     }
 
     .call-window {
-        gap: 16px;
-        padding: 16px;
-        border-radius: 16px;
+        gap: 12px;
+        padding: 12px;
+        border-radius: 14px;
     }
 
-    .video-grid:not([data-count="0"]):not([data-count="1"]) {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .tile-avatar img {
-        width: 56px;
-        height: 56px;
+    .video-grid {
+        --tile-min: 140px;
     }
 }
 

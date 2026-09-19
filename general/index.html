@@ -38,6 +38,15 @@
 
         <div class="chat-panel">
             <div id="message-box" role="log" aria-live="polite" aria-label="Chat messages"></div>
+
+            <div id="reply-banner" class="reply-banner hidden">
+                <div class="reply-banner-text">
+                    <span class="reply-banner-label">Replying to <strong id="reply-banner-name"></strong></span>
+                    <span id="reply-banner-snippet"></span>
+                </div>
+                <button id="reply-cancel" class="reply-banner-close" type="button" aria-label="Cancel reply">&times;</button>
+            </div>
+
             <form id="message-form" class="chat-input-group">
                 <button id="attach-button" type="button" class="attach-button" aria-label="Attach image or video">
                     <i class="fa-solid fa-paperclip"></i>
@@ -56,7 +65,7 @@
         </div>
     </div>
 
-    <div id="call-modal" class="call-modal hidden" role="dialog" aria-modal="true" aria-labelledby="call-title">
+    <div id="call-modal" class="call-modal hidden" role="dialog" aria-modal="false" aria-labelledby="call-title">
         <div class="call-window">
             <header class="call-header">
                 <div class="call-heading">
@@ -78,8 +87,8 @@
                 <button id="mic-button" class="call-btn" type="button" aria-label="Mute microphone" aria-pressed="false">
                     <i class="fa-solid fa-microphone"></i>
                 </button>
-                <button id="cam-button" class="call-btn" type="button" aria-label="Turn off camera" aria-pressed="false">
-                    <i class="fa-solid fa-video"></i>
+                <button id="cam-button" class="call-btn" type="button" aria-label="Turn on camera" aria-pressed="true">
+                    <i class="fa-solid fa-video-slash"></i>
                 </button>
                 <button id="hangup-button" class="call-btn leave" type="button">
                     <i class="fa-solid fa-phone-slash"></i>
