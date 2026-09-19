@@ -1,6 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, collection, addDoc, query, orderBy, limit, onSnapshot, serverTimestamp, getDocs, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-storage.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyCLKCCpNbCs2AJm7g0JtGIjL43X5hr31N8",
@@ -412,39 +413,6 @@ const localVideo = document.getElementById('local-video');
 const videoGrid = document.getElementById('video-grid');
 const hangupButton = document.getElementById('hangup-button');
 const callStatus = document.getElementById('call-status');
-const toggleAudioBtn = document.getElementById('toggle-audio-btn');
-const toggleVideoBtn = document.getElementById('toggle-video-btn');
-
-let isAudioMuted = false;
-let isVideoMuted = false;
-
-if (toggleAudioBtn) {
-    toggleAudioBtn.addEventListener('click', () => {
-        if (!localStream) return;
-        isAudioMuted = !isAudioMuted;
-        localStream.getAudioTracks().forEach(track => {
-            track.enabled = !isAudioMuted;
-        });
-        toggleAudioBtn.classList.toggle('muted', isAudioMuted);
-        toggleAudioBtn.innerHTML = isAudioMuted 
-            ? '<i class="fa-solid fa-microphone-slash"></i>' 
-            : '<i class="fa-solid fa-microphone"></i>';
-    });
-}
-
-if (toggleVideoBtn) {
-    toggleVideoBtn.addEventListener('click', () => {
-        if (!localStream) return;
-        isVideoMuted = !isVideoMuted;
-        localStream.getVideoTracks().forEach(track => {
-            track.enabled = !isVideoMuted;
-        });
-        toggleVideoBtn.classList.toggle('muted', isVideoMuted);
-        toggleVideoBtn.innerHTML = isVideoMuted 
-            ? '<i class="fa-solid fa-video-slash"></i>' 
-            : '<i class="fa-solid fa-video"></i>';
-    });
-}
 
 function showCallModal() {
     if (callModal) callModal.classList.remove('hidden');
@@ -524,9 +492,10 @@ async function joinGroupCall(roomId) {
                 if (!remoteVideoEl) {
                     const container = document.createElement('div');
                     container.className = 'remote-video-container';
+                    container.style.position = 'relative';
                     container.innerHTML = `
-                        <video id="video-${remoteUser.uid}" autoplay playsinline></video>
-                        <span class="video-name-tag">${escapeHtml(remoteUser.displayName)}</span>
+                        <video id="video-${remoteUser.uid}" autoplay playsinline style="width: 100%; height: 150px; background: #000; border-radius: 6px; object-fit: cover;"></video>
+                        <span style="position: absolute; bottom: 5px; left: 5px; color: #fff; background: rgba(0,0,0,0.6); padding: 2px 6px; font-size: 11px; border-radius: 4px;">${escapeHtml(remoteUser.displayName)}</span>
                     `;
                     videoGrid.appendChild(container);
                     remoteVideoEl = document.getElementById(`video-${remoteUser.uid}`);
