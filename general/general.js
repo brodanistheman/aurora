@@ -663,13 +663,26 @@ if (micButton) micButton.addEventListener('click', toggleMic);
 if (camButton) camButton.addEventListener('click', toggleCamera);
 if (hangupButton) hangupButton.addEventListener('click', hangUpGroupCall);
 
+const AUDIO_CONSTRAINTS = {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+    channelCount: 1
+};
+
+const VIDEO_CONSTRAINTS = {
+    width: { ideal: 640 },
+    height: { ideal: 360 },
+    frameRate: { ideal: 24, max: 30 }
+};
+
 async function startLocalMedia() {
     try {
-        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        localStream = await navigator.mediaDevices.getUserMedia({ video: VIDEO_CONSTRAINTS, audio: AUDIO_CONSTRAINTS });
     } catch (err) {
         console.error('Camera + mic unavailable, trying mic only.', err);
         try {
-            localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            localStream = await navigator.mediaDevices.getUserMedia({ audio: AUDIO_CONSTRAINTS });
         } catch (err2) {
             console.error('Error accessing media devices.', err2);
             alert('Could not access your camera or microphone. Check your browser permissions and try again.');
@@ -716,7 +729,35 @@ function createPeer(remoteUid, remoteName) {
         }
     };
 
+    pc.onconnectionstatechange = () => {
+        if (pc.connectionState === 'connected') tuneSenders(pc);
+    };
+
     return pc;
+}
+
+async function tuneSenders(pc) {
+    for (const sender of pc.getSenders()) {
+        if (!sender.track) continue;
+        const params = sender.getParameters();
+        if (!params.encodings || !params.encodings.length) params.encodings = [{}];
+
+        if (sender.track.kind === 'video') {
+            params.encodings[0].maxBitrate = 600000;
+            params.encodings[0].priority = 'low';
+            params.encodings[0].networkPriority = 'low';
+        } else {
+            params.encodings[0].maxBitrate = 64000;
+            params.encodings[0].priority = 'high';
+            params.encodings[0].networkPriority = 'high';
+        }
+
+        try {
+            await sender.setParameters(params);
+        } catch (err) {
+            console.warn('Could not tune sender:', err);
+        }
+    }
 }
 
 function addRemoteCandidate(pc, candidateData) {
