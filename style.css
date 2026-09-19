@@ -900,8 +900,18 @@ label[for="profile-pic-input"] {
     transform: scaleX(-1);
 }
 
-.video-tile.cam-off video {
+.video-tile.cam-off video,
+.video-tile.video-hidden video {
     visibility: hidden;
+}
+
+.video-tile.remote {
+    cursor: pointer;
+    transition: border-color 0.15s ease;
+}
+
+.video-tile.remote:hover {
+    border-color: rgba(255, 255, 255, 0.28);
 }
 
 .tile-avatar {
@@ -911,20 +921,38 @@ label[for="profile-pic-input"] {
     place-items: center;
 }
 
-.video-tile.cam-off .tile-avatar {
+.video-tile.cam-off .tile-avatar,
+.video-tile.video-hidden .tile-avatar {
     display: grid;
 }
 
-.tile-avatar span {
-    display: grid;
-    place-items: center;
-    width: 72px;
-    height: 72px;
+.tile-avatar img {
+    display: block;
+    width: 88px;
+    height: 88px;
     border-radius: 50%;
+    object-fit: cover;
     background: #2b2f4a;
-    color: #c7c9ff;
-    font-size: 24px;
-    font-weight: 600;
+    transition: box-shadow 0.12s ease;
+}
+
+.video-tile::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    border: 3px solid transparent;
+    border-radius: inherit;
+    pointer-events: none;
+    transition: border-color 0.12s ease;
+}
+
+.video-tile.speaking::after {
+    border-color: var(--call-live);
+}
+
+.video-tile.speaking .tile-avatar img {
+    box-shadow: 0 0 0 3px var(--call-live);
 }
 
 .tile-label {
@@ -956,7 +984,8 @@ label[for="profile-pic-input"] {
     color: #ff8b8f;
 }
 
-.video-tile.mic-off .tile-label i {
+.video-tile.mic-off .tile-label .mic-icon,
+.video-tile.deafened .tile-label .deafen-icon {
     display: inline;
 }
 
@@ -1034,9 +1063,158 @@ label[for="profile-pic-input"] {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .tile-avatar span {
-        width: 52px;
-        height: 52px;
-        font-size: 18px;
+    .tile-avatar img {
+        width: 56px;
+        height: 56px;
     }
+}
+
+.tile-menu {
+    position: fixed;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    width: 260px;
+    padding: 8px;
+    background: #1e2130;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 14px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+    color: #f1f3f9;
+}
+
+.tile-menu :focus-visible {
+    outline: 2px solid #a5b4fc;
+    outline-offset: 2px;
+}
+
+.tile-menu-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+    padding: 8px 10px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tile-menu-avatar {
+    flex: none;
+    display: block;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: #2b2f4a;
+}
+
+.tile-menu-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.tile-menu-volume {
+    padding: 8px 10px 12px;
+}
+
+.tile-menu-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    font-size: 13px;
+    color: #c9cee0;
+}
+
+.tile-menu-value {
+    font-variant-numeric: tabular-nums;
+    color: #ffffff;
+}
+
+.tile-menu-slider {
+    display: block;
+    width: 100%;
+    height: 18px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    accent-color: var(--call-live);
+    cursor: pointer;
+}
+
+.tile-menu.is-deafened .tile-menu-slider {
+    opacity: 0.4;
+}
+
+.tile-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    margin: 0;
+    padding: 9px 10px;
+    border: 0;
+    border-radius: 8px;
+    background-color: transparent;
+    color: #e5e8f2;
+    font-size: 13px;
+    font-weight: 500;
+    text-align: left;
+}
+
+.tile-menu-item:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.tile-menu-item i {
+    flex: none;
+    width: 16px;
+    text-align: center;
+    color: #9aa1b5;
+}
+
+.tile-menu-text {
+    flex: 1;
+    min-width: 0;
+}
+
+.tile-menu-text small {
+    display: block;
+    margin-top: 2px;
+    font-size: 11.5px;
+    font-weight: 400;
+    color: #9aa1b5;
+}
+
+.tile-menu-switch {
+    position: relative;
+    flex: none;
+    width: 34px;
+    height: 20px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.18);
+    transition: background-color 0.15s ease;
+}
+
+.tile-menu-switch::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #ffffff;
+    transition: transform 0.15s ease;
+}
+
+.tile-menu-item[aria-checked="true"] .tile-menu-switch {
+    background: var(--call-live);
+}
+
+.tile-menu-item[aria-checked="true"] .tile-menu-switch::after {
+    transform: translateX(14px);
 }

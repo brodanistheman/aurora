@@ -536,12 +536,6 @@ function hideCallModal() {
     if (callModal) callModal.classList.add('hidden');
 }
 
-function initials(name) {
-    const parts = String(name || '?').trim().split(/\s+/).filter(Boolean);
-    const text = parts.length > 1 ? parts[0][0] + parts[1][0] : (parts[0] || '?').slice(0, 2);
-    return text.toUpperCase();
-}
-
 function getTile(id) {
     return videoGrid ? videoGrid.querySelector(`[data-tile-id="${CSS.escape(id)}"]`) : null;
 }
@@ -569,8 +563,9 @@ function updateGrid() {
 
 function buildTile(id, name, isLocal) {
     const tile = document.createElement('div');
-    tile.className = `video-tile${isLocal ? ' local' : ''}`;
+    tile.className = `video-tile${isLocal ? ' local' : ' remote'}`;
     tile.dataset.tileId = id;
+    tile.dataset.name = name || 'Anonymous';
 
     const video = document.createElement('video');
     video.autoplay = true;
@@ -579,17 +574,36 @@ function buildTile(id, name, isLocal) {
 
     const avatar = document.createElement('div');
     avatar.className = 'tile-avatar';
-    const avatarInitials = document.createElement('span');
-    avatarInitials.textContent = initials(name);
-    avatar.appendChild(avatarInitials);
+    const avatarImg = document.createElement('img');
+    avatarImg.alt = '';
+    avatarImg.src = isLocal ? (currentProfilePic || defaultAvatar) : defaultAvatar;
+    avatarImg.addEventListener('error', () => { avatarImg.src = defaultAvatar; }, { once: true });
+    avatar.appendChild(avatarImg);
 
     const label = document.createElement('div');
     label.className = 'tile-label';
     const micIcon = document.createElement('i');
-    micIcon.className = 'fa-solid fa-microphone-slash';
+    micIcon.className = 'fa-solid fa-microphone-slash mic-icon';
+    const deafenIcon = document.createElement('i');
+    deafenIcon.className = 'fa-solid fa-volume-xmark deafen-icon';
     const nameEl = document.createElement('span');
     nameEl.textContent = isLocal ? 'You' : (name || 'Anonymous');
-    label.append(micIcon, nameEl);
+    label.append(micIcon, deafenIcon, nameEl);
+
+    if (!isLocal) {
+        tile.tabIndex = 0;
+        tile.title = 'Click for voice settings';
+        tile.setAttribute('role', 'button');
+        tile.setAttribute('aria-haspopup', 'menu');
+        tile.setAttribute('aria-label', `Voice settings for ${name || 'Anonymous'}`);
+        tile.addEventListener('click', () => toggleTileMenu(id, tile));
+        tile.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                toggleTileMenu(id, tile);
+            }
+        });
+    }
 
     tile.append(video, avatar, label);
     videoGrid.appendChild(tile);
@@ -603,8 +617,290 @@ function ensureRemoteTile(uid, name) {
     if (!tile) {
         tile = buildTile(uid, name, false).tile;
         if (remoteMedia[uid]) setTileState(uid, remoteMedia[uid]);
+        applyPrefs(uid);
+        getProfilePic(uid).then((pic) => setTileAvatar(uid, pic));
     }
     return tile.querySelector('video');
+}
+
+const PREFS_KEY = 'aurora_call_prefs';
+const peerPrefs = loadPrefs();
+let tileMenuEl = null;
+let openMenuUid = null;
+
+function loadPrefs() {
+    try {
+        return JSON.parse(localStorage.getItem(PREFS_KEY)) || {};
+    } catch {
+        return {};
+    }
+}
+
+function savePrefs() {
+    try {
+        localStorage.setItem(PREFS_KEY, JSON.stringify(peerPrefs));
+    } catch {}
+}
+
+function getPrefs(uid) {
+    return { volume: 1, deafened: false, hideVideo: false, ...(peerPrefs[uid] || {}) };
+}
+
+function setPrefs(uid, patch) {
+    peerPrefs[uid] = { ...getPrefs(uid), ...patch };
+    savePrefs();
+    applyPrefs(uid);
+}
+
+function applyPrefs(uid) {
+    const tile = getTile(uid);
+    if (!tile) return;
+    const prefs = getPrefs(uid);
+    const video = tile.querySelector('video');
+    if (video) {
+        video.volume = prefs.volume;
+        video.muted = prefs.deafened;
+    }
+    tile.classList.toggle('deafened', prefs.deafened);
+    tile.classList.toggle('video-hidden', prefs.hideVideo);
+}
+
+function closeTileMenu() {
+    if (tileMenuEl) {
+        tileMenuEl.remove();
+        tileMenuEl = null;
+    }
+    openMenuUid = null;
+}
+
+function toggleTileMenu(uid, tile) {
+    if (openMenuUid === uid) {
+        closeTileMenu();
+    } else {
+        openTileMenu(uid, tile);
+    }
+}
+
+function positionTileMenu(menu, tile) {
+    const margin = 12;
+    const rect = tile.getBoundingClientRect();
+    const menuRect = menu.getBoundingClientRect();
+
+    let left = rect.left + rect.width / 2 - menuRect.width / 2;
+    let top = rect.top + rect.height / 2 - menuRect.height / 2;
+
+    left = Math.max(margin, Math.min(left, window.innerWidth - menuRect.width - margin));
+    top = Math.max(margin, Math.min(top, window.innerHeight - menuRect.height - margin));
+
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
+}
+
+function openTileMenu(uid, tile) {
+    closeTileMenu();
+    if (!callModal) return;
+
+    const name = tile.dataset.name || 'Anonymous';
+    const prefs = getPrefs(uid);
+    const percent = Math.round(prefs.volume * 100);
+
+    const menu = document.createElement('div');
+    menu.className = `tile-menu${prefs.deafened ? ' is-deafened' : ''}`;
+    menu.setAttribute('role', 'menu');
+    menu.setAttribute('aria-label', `Voice settings for ${name}`);
+    menu.innerHTML = `
+        <div class="tile-menu-head">
+            <img class="tile-menu-avatar" alt="">
+            <span class="tile-menu-name">${escapeHtml(name)}</span>
+        </div>
+        <div class="tile-menu-volume">
+            <label class="tile-menu-row" for="tile-menu-volume-input">
+                <span>Volume</span>
+                <span class="tile-menu-value">${percent}%</span>
+            </label>
+            <input id="tile-menu-volume-input" class="tile-menu-slider" type="range" min="0" max="100" step="1" value="${percent}">
+        </div>
+        <button type="button" class="tile-menu-item" role="menuitemcheckbox" data-action="deafen" aria-checked="${prefs.deafened}">
+            <i class="fa-solid fa-volume-xmark"></i>
+            <span class="tile-menu-text">Deafen<small>You won't hear them</small></span>
+            <span class="tile-menu-switch"></span>
+        </button>
+        <button type="button" class="tile-menu-item" role="menuitemcheckbox" data-action="video" aria-checked="${prefs.hideVideo}">
+            <i class="fa-solid fa-eye-slash"></i>
+            <span class="tile-menu-text">Hide video<small>Show their picture instead</small></span>
+            <span class="tile-menu-switch"></span>
+        </button>
+        <button type="button" class="tile-menu-item" role="menuitem" data-action="reset">
+            <i class="fa-solid fa-rotate-left"></i>
+            <span class="tile-menu-text">Reset settings</span>
+        </button>
+    `;
+
+    const tileImg = tile.querySelector('.tile-avatar img');
+    menu.querySelector('.tile-menu-avatar').src = tileImg ? tileImg.getAttribute('src') : defaultAvatar;
+
+    const slider = menu.querySelector('.tile-menu-slider');
+    const valueEl = menu.querySelector('.tile-menu-value');
+
+    slider.addEventListener('input', () => {
+        valueEl.textContent = `${slider.value}%`;
+        setPrefs(uid, { volume: Number(slider.value) / 100 });
+    });
+
+    menu.addEventListener('click', (event) => {
+        const item = event.target.closest('.tile-menu-item');
+        if (!item) return;
+
+        const action = item.dataset.action;
+        if (action === 'deafen') {
+            const next = !getPrefs(uid).deafened;
+            setPrefs(uid, { deafened: next });
+            item.setAttribute('aria-checked', String(next));
+            menu.classList.toggle('is-deafened', next);
+        } else if (action === 'video') {
+            const next = !getPrefs(uid).hideVideo;
+            setPrefs(uid, { hideVideo: next });
+            item.setAttribute('aria-checked', String(next));
+        } else if (action === 'reset') {
+            delete peerPrefs[uid];
+            savePrefs();
+            applyPrefs(uid);
+            openTileMenu(uid, tile);
+        }
+    });
+
+    callModal.appendChild(menu);
+    tileMenuEl = menu;
+    openMenuUid = uid;
+    positionTileMenu(menu, tile);
+    slider.focus();
+}
+
+document.addEventListener('mousedown', (event) => {
+    if (!tileMenuEl || tileMenuEl.contains(event.target)) return;
+    const onTile = event.target.closest ? event.target.closest('.video-tile.remote') : null;
+    if (onTile && onTile.dataset.tileId === openMenuUid) return;
+    closeTileMenu();
+});
+
+document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || !tileMenuEl) return;
+    const tile = openMenuUid ? getTile(openMenuUid) : null;
+    closeTileMenu();
+    if (tile) tile.focus();
+});
+
+window.addEventListener('resize', closeTileMenu);
+
+const SPEAKING_THRESHOLD = 0.025;
+const SPEAKING_HOLD_MS = 350;
+const SPEAKING_POLL_MS = 80;
+const profilePicCache = {};
+const speakingMonitors = {};
+let audioCtx = null;
+let speakingTimer = null;
+
+async function getProfilePic(uid) {
+    if (profilePicCache[uid] !== undefined) return profilePicCache[uid];
+    try {
+        const snap = await getDoc(doc(db, 'users', uid));
+        const pic = snap.exists() ? snap.data().profilePic : '';
+        profilePicCache[uid] = isSafeImageSrc(pic) ? pic : defaultAvatar;
+    } catch (err) {
+        profilePicCache[uid] = defaultAvatar;
+    }
+    return profilePicCache[uid];
+}
+
+function setTileAvatar(id, src) {
+    const tile = getTile(id);
+    const img = tile ? tile.querySelector('.tile-avatar img') : null;
+    if (img) img.src = src || defaultAvatar;
+}
+
+function getAudioContext() {
+    if (!audioCtx) {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) return null;
+        audioCtx = new Ctx();
+    }
+    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+    return audioCtx;
+}
+
+function checkSpeaking() {
+    const now = performance.now();
+    Object.keys(speakingMonitors).forEach((id) => {
+        const monitor = speakingMonitors[id];
+        monitor.analyser.getByteTimeDomainData(monitor.data);
+
+        let sum = 0;
+        for (let i = 0; i < monitor.data.length; i++) {
+            const v = (monitor.data[i] - 128) / 128;
+            sum += v * v;
+        }
+        const level = Math.sqrt(sum / monitor.data.length);
+        if (level > SPEAKING_THRESHOLD) monitor.lastLoud = now;
+
+        const speaking = now - monitor.lastLoud < SPEAKING_HOLD_MS;
+        if (speaking !== monitor.speaking) {
+            monitor.speaking = speaking;
+            const tile = getTile(id);
+            if (tile) tile.classList.toggle('speaking', speaking);
+        }
+    });
+}
+
+function watchSpeaking(id, audioTrack) {
+    stopWatchingSpeaking(id);
+    const ctx = getAudioContext();
+    if (!ctx || !audioTrack) return;
+
+    try {
+        const source = ctx.createMediaStreamSource(new MediaStream([audioTrack]));
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 512;
+        analyser.smoothingTimeConstant = 0.3;
+        source.connect(analyser);
+
+        speakingMonitors[id] = {
+            source,
+            analyser,
+            data: new Uint8Array(analyser.fftSize),
+            speaking: false,
+            lastLoud: 0
+        };
+
+        if (!speakingTimer) speakingTimer = setInterval(checkSpeaking, SPEAKING_POLL_MS);
+    } catch (err) {
+        console.warn('Could not monitor audio level:', err);
+    }
+}
+
+function stopWatchingSpeaking(id) {
+    const monitor = speakingMonitors[id];
+    if (!monitor) return;
+
+    try {
+        monitor.source.disconnect();
+    } catch (err) {}
+    delete speakingMonitors[id];
+
+    const tile = getTile(id);
+    if (tile) tile.classList.remove('speaking');
+
+    if (!Object.keys(speakingMonitors).length && speakingTimer) {
+        clearInterval(speakingTimer);
+        speakingTimer = null;
+    }
+}
+
+function stopAllSpeaking() {
+    Object.keys(speakingMonitors).forEach(stopWatchingSpeaking);
+    if (audioCtx) {
+        audioCtx.close().catch(() => {});
+        audioCtx = null;
+    }
 }
 
 function updateControls() {
@@ -696,6 +992,8 @@ async function startLocalMedia() {
 }
 
 function removePeer(uid) {
+    if (openMenuUid === uid) closeTileMenu();
+    stopWatchingSpeaking(uid);
     const pc = peerConnections[uid];
     if (pc) {
         pc.onicecandidate = null;
@@ -726,6 +1024,7 @@ function createPeer(remoteUid, remoteName) {
     pc.ontrack = (event) => {
         if (!remoteStream.getTracks().includes(event.track)) {
             remoteStream.addTrack(event.track);
+            if (event.track.kind === 'audio') watchSpeaking(remoteUid, event.track);
         }
     };
 
@@ -908,6 +1207,8 @@ async function joinGroupCall(roomId = CALL_ROOM_ID) {
 
     showCallModal();
     buildTile('local', currentDisplayName, true).video.srcObject = localStream;
+    const localAudioTrack = localStream.getAudioTracks()[0];
+    if (localAudioTrack) watchSpeaking('local', localAudioTrack);
     updateControls();
 
     try {
@@ -917,7 +1218,6 @@ async function joinGroupCall(roomId = CALL_ROOM_ID) {
         await setDoc(myParticipantRef, {
             uid: user.uid,
             displayName: currentDisplayName,
-            profilePic: currentProfilePic,
             micOn,
             camOn,
             heartbeatMs: Date.now(),
@@ -966,6 +1266,9 @@ async function hangUpGroupCall() {
     const callRefs = myCallDocRefs;
     myParticipantRef = null;
     myCallDocRefs = [];
+
+    closeTileMenu();
+    stopAllSpeaking();
 
     callUnsubs.forEach((unsub) => unsub());
     callUnsubs = [];
