@@ -3,125 +3,102 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Aurora group call">
     <title>Aurora Calls</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="../style.css">
 </head>
-
 <body class="call-page-body">
     <div class="call-page-layout">
-
         <aside class="sidebar call-page-sidebar">
             <h1>Aurora</h1>
 
             <div id="user-info" aria-live="polite"></div>
 
             <div class="button-group">
-                <button id="profile-button" type="button">Profile</button>
-                <button id="settings-button" type="button">Settings</button>
-                <button id="logout-button" type="button">Log Out</button>
+                <button id="profile-button" type="button">
+                    <i class="fa-solid fa-user"></i>
+                    Profile
+                </button>
+                <button id="settings-button" type="button">
+                    <i class="fa-solid fa-gear"></i>
+                    Settings
+                </button>
+                <button id="logout-button" type="button">
+                    <i class="fa-solid fa-right-from-bracket"></i>
+                    Log Out
+                </button>
             </div>
 
             <div class="active-users-card">
                 <h3>Online</h3>
-                <div id="online-users-list" aria-live="polite"></div>
+                <div id="online-users-list" class="active-users-list" aria-live="polite"></div>
             </div>
 
             <div id="call-panel" class="call-panel">
-                <div class="call-panel-title">Group Call</div>
-
-                <div id="call-status" class="call-status">
-                    No active call
+                <div class="call-panel-status" aria-live="polite">
+                    <span class="call-panel-dot"></span>
+                    <span id="call-panel-status">No one is in a call</span>
                 </div>
-
-                <button id="group-call-btn" type="button">
-                    Start group call
+                <button id="group-call-btn" class="call-panel-btn" type="button">
+                    <i class="fa-solid fa-video"></i>
+                    <span id="group-call-label">Start group call</span>
                 </button>
             </div>
         </aside>
 
         <main class="call-page-main">
-            <div
-                id="call-modal"
-                class="call-modal"
-                role="region"
-                aria-label="Aurora group call"
-            >
+            <div id="call-modal" class="call-modal" role="region" aria-label="Aurora group call">
                 <div class="call-window">
-
                     <header class="call-header">
-                        <div class="call-header-left">
-                            <div class="call-title">Aurora group call</div>
-                            <div id="call-status-modal" class="call-status">
-                                Waiting for participants
-                            </div>
+                        <div class="call-heading">
+                            <h2 id="call-title" class="call-title">
+                                <span class="call-live-dot"></span>
+                                Aurora group call
+                            </h2>
+                            <p id="call-status" class="call-subtitle" aria-live="polite">Join the call to get started</p>
                         </div>
 
-                        <div class="call-count">
+                        <div class="call-count" title="People in the call">
+                            <i class="fa-solid fa-user-group"></i>
                             <span id="call-count">0</span>
-                            <span>in call</span>
                         </div>
                     </header>
 
-                    <button
-                        id="audio-unlock"
-                        class="audio-unlock"
-                        type="button"
-                    >
-                        Enable audio
+                    <button id="audio-unlock" class="audio-unlock hidden" type="button">
+                        <i class="fa-solid fa-volume-high"></i>
+                        Sound is blocked. Click to turn it on
                     </button>
 
-                    <div
-                        id="video-grid"
-                        class="video-grid"
-                        data-count="0"
-                    >
-                        <div
-                            id="call-empty-state"
-                            class="call-empty-state"
-                        >
-                            <div class="call-empty-title">
-                                Ready to join?
-                            </div>
-
-                            <div class="call-empty-text">
-                                Start or join the group call to appear here.
+                    <div id="video-grid" class="video-grid" data-count="0">
+                        <div id="call-empty-state" class="call-empty-state">
+                            <div class="call-empty-inner">
+                                <div class="call-empty-icon">
+                                    <i class="fa-solid fa-video"></i>
+                                </div>
+                                <h3 class="call-empty-title">Ready to join?</h3>
+                                <p class="call-empty-text">
+                                    Start the group call from the left panel. Your profile picture and display name will appear to other participants.
+                                </p>
                             </div>
                         </div>
                     </div>
 
                     <footer class="call-controls">
-                        <button
-                            id="toggle-mic"
-                            class="call-control"
-                            type="button"
-                            aria-label="Toggle microphone"
-                        >
-                            Mic
+                        <button id="mic-button" class="call-btn" type="button" aria-label="Mute microphone" aria-pressed="false">
+                            <i class="fa-solid fa-microphone"></i>
                         </button>
-
-                        <button
-                            id="toggle-camera"
-                            class="call-control"
-                            type="button"
-                            aria-label="Toggle camera"
-                        >
-                            Camera
+                        <button id="cam-button" class="call-btn" type="button" aria-label="Turn on camera" aria-pressed="false">
+                            <i class="fa-solid fa-video-slash"></i>
                         </button>
-
-                        <button
-                            id="hangup-call"
-                            class="call-control hangup"
-                            type="button"
-                            aria-label="Leave call"
-                        >
-                            Leave
+                        <button id="hangup-button" class="call-btn leave" type="button">
+                            <i class="fa-solid fa-phone-slash"></i>
+                            <span>Leave</span>
                         </button>
                     </footer>
-
                 </div>
             </div>
         </main>
-
     </div>
 
     <script type="module" src="general.js"></script>
