@@ -1129,6 +1129,50 @@ label[for="profile-pic-input"] {
     color: #ff8b8f;
 }
 
+.tile-status {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 2;
+    padding: 4px 9px;
+    border-radius: 8px;
+    background: rgba(10, 12, 20, 0.7);
+    font-size: 12px;
+    font-weight: 500;
+    color: #fde68a;
+}
+
+.tile-status:empty {
+    display: none;
+}
+
+.video-tile[data-conn="failed"] .tile-status {
+    color: #ff8b8f;
+}
+
+.audio-unlock {
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    width: auto;
+    margin: 0;
+    padding: 8px 14px;
+    background: #fef3c7;
+    color: #78350f;
+    border: 1px solid #fcd34d;
+    border-radius: 8px;
+    font-size: 13px;
+}
+
+.audio-unlock:hover {
+    background: #fde68a;
+}
+
+.audio-unlock.hidden {
+    display: none;
+}
+
 .video-tile.mic-off .tile-label .mic-icon,
 .video-tile.deafened .tile-label .deafen-icon {
     display: inline;

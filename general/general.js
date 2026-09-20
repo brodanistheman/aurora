@@ -49,6 +49,25 @@ let currentDisplayName = 'Anonymous';
 let currentProfilePic = '';
 let presenceInterval = null;
 
+// People's computers often have clocks that are off by minutes. Call "freshness"
+// checks compare timestamps written by different computers, so we estimate how far
+// our clock is from the server's and correct for it.
+let serverOffsetMs = 0;
+
+function nowMs() {
+    return Date.now() + serverOffsetMs;
+}
+
+async function syncServerClock(statusRef) {
+    try {
+        const snap = await getDoc(statusRef);
+        const changed = snap.data() && snap.data().lastChanged;
+        if (changed && changed.toMillis) serverOffsetMs = changed.toMillis() - Date.now();
+    } catch (err) {
+        console.warn('Could not sync clock with server:', err);
+    }
+}
+
 function escapeHtml(str) {
     if (str === null || str === undefined) return '';
     return String(str)
@@ -124,7 +143,7 @@ function setupPresence(user) {
         }
     };
 
-    updateStatus('online');
+    updateStatus('online').then(() => syncServerClock(userStatusRef));
 
     document.addEventListener("visibilitychange", () => {
         updateStatus(document.hidden ? 'away' : 'online');
@@ -493,11 +512,32 @@ const CALL_ROOM_ID = 'main-room';
 const HEARTBEAT_MS = 20000;
 const STALE_AFTER_MS = 75000;
 
+// TURN relays audio/video for people whose network blocks direct connections
+// (school/work Wi-Fi, mobile data, strict routers). Without it, those people
+// connect to the call but can't hear or see anyone.
+//
+// Sign up for a TURN provider (e.g. metered.ca has a free plan), generate
+// credentials, and paste the entries they give you here. Use the exact hostnames
+// and ports shown in your provider's dashboard.
+const TURN_SERVERS = [
+    // { urls: 'turn:standard.relay.metered.ca:80', username: 'YOUR_USERNAME', credential: 'YOUR_CREDENTIAL' },
+    // { urls: 'turn:standard.relay.metered.ca:80?transport=tcp', username: 'YOUR_USERNAME', credential: 'YOUR_CREDENTIAL' },
+    // { urls: 'turn:standard.relay.metered.ca:443', username: 'YOUR_USERNAME', credential: 'YOUR_CREDENTIAL' },
+    // { urls: 'turns:standard.relay.metered.ca:443?transport=tcp', username: 'YOUR_USERNAME', credential: 'YOUR_CREDENTIAL' },
+];
+
+if (!TURN_SERVERS.length) {
+    console.warn('[call] No TURN server configured. People on strict networks will not be able to connect.');
+}
+
 const servers = {
     iceServers: [
-        { urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] }
+        { urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] },
+        ...TURN_SERVERS
     ]
 };
+
+const MAX_CALL_RETRIES = 2;
 
 let localStream = null;
 let currentRoomId = null;
@@ -515,6 +555,7 @@ let roomParticipants = [];
 let roomWatchStarted = false;
 const answeredCalls = new Set();
 const remoteMedia = {};
+const remoteAudio = {};
 
 const callModal = document.getElementById('call-modal');
 const videoGrid = document.getElementById('video-grid');
@@ -527,9 +568,38 @@ const groupCallButton = document.getElementById('group-call-btn');
 const groupCallLabel = document.getElementById('group-call-label');
 const callPanel = document.getElementById('call-panel');
 const callPanelStatus = document.getElementById('call-panel-status');
+const audioUnlock = document.getElementById('audio-unlock');
+
+// Some browsers block sound until the user clicks. If that happens we show a
+// button instead of leaving people in a silent call.
+function showAudioBlocked() {
+    if (audioUnlock) audioUnlock.classList.remove('hidden');
+}
+
+function playRemoteAudio(audioEl) {
+    const attempt = audioEl.play();
+    if (attempt && attempt.catch) attempt.catch(showAudioBlocked);
+}
+
+function unlockAudio() {
+    Object.values(remoteAudio).forEach((audioEl) => audioEl.play().catch(() => {}));
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+    if (audioUnlock) audioUnlock.classList.add('hidden');
+}
+
+if (audioUnlock) audioUnlock.addEventListener('click', unlockAudio);
+
+function setTileConnection(uid, state) {
+    const tile = getTile(uid);
+    if (!tile) return;
+    tile.dataset.conn = state;
+    const status = tile.querySelector('.tile-status');
+    if (!status) return;
+    status.textContent = state === 'connected' ? '' : state === 'failed' ? "Can't connect" : 'Connecting…';
+}
 
 function isFresh(participant) {
-    return Date.now() - (participant.heartbeatMs || 0) < STALE_AFTER_MS;
+    return nowMs() - (participant.heartbeatMs || 0) < STALE_AFTER_MS;
 }
 
 function freshParticipants() {
@@ -648,7 +718,7 @@ function buildTile(id, name, isLocal) {
     const video = document.createElement('video');
     video.autoplay = true;
     video.playsInline = true;
-    if (isLocal) video.muted = true;
+    video.muted = true; // remote sound plays through a separate <audio> element
 
     const avatar = document.createElement('div');
     avatar.className = 'tile-avatar';
@@ -683,7 +753,10 @@ function buildTile(id, name, isLocal) {
         });
     }
 
-    tile.append(video, avatar, label);
+    const status = document.createElement('div');
+    status.className = 'tile-status';
+
+    tile.append(video, avatar, status, label);
     videoGrid.appendChild(tile);
     updateGrid();
 
@@ -731,14 +804,16 @@ function setPrefs(uid, patch) {
 }
 
 function applyPrefs(uid) {
+    const prefs = getPrefs(uid);
+
+    const audioEl = remoteAudio[uid];
+    if (audioEl) {
+        audioEl.volume = prefs.volume;
+        audioEl.muted = prefs.deafened;
+    }
+
     const tile = getTile(uid);
     if (!tile) return;
-    const prefs = getPrefs(uid);
-    const video = tile.querySelector('video');
-    if (video) {
-        video.volume = prefs.volume;
-        video.muted = prefs.deafened;
-    }
     tile.classList.toggle('deafened', prefs.deafened);
     tile.classList.toggle('video-hidden', prefs.hideVideo);
 }
@@ -1115,6 +1190,12 @@ async function startLocalMedia() {
 function removePeer(uid) {
     if (openMenuUid === uid) closeTileMenu();
     stopWatchingSpeaking(uid);
+    const audioEl = remoteAudio[uid];
+    if (audioEl) {
+        audioEl.pause();
+        audioEl.srcObject = null;
+        delete remoteAudio[uid];
+    }
     const pc = peerConnections[uid];
     if (pc) {
         pc.onicecandidate = null;
@@ -1131,7 +1212,7 @@ function removePeer(uid) {
     updateGrid();
 }
 
-function createPeer(remoteUid, remoteName, isCaller = false) {
+function createPeer(remoteUid, remoteName, isCaller = false, onFailed = null) {
     removePeer(remoteUid);
 
     const pc = new RTCPeerConnection(servers);
@@ -1145,18 +1226,50 @@ function createPeer(remoteUid, remoteName, isCaller = false) {
         pc.addTransceiver('video', { direction: 'sendrecv' });
     }
 
-    const remoteStream = new MediaStream();
-    ensureRemoteTile(remoteUid, remoteName).srcObject = remoteStream;
+    // Picture and sound are played separately. The tile's <video> only shows
+    // the picture (always muted); sound comes from a dedicated <audio> element,
+    // so hearing someone never depends on their camera sending frames.
+    const remoteVideoStream = new MediaStream();
+    ensureRemoteTile(remoteUid, remoteName).srcObject = remoteVideoStream;
+    setTileConnection(remoteUid, 'connecting');
+
+    const remoteAudioStream = new MediaStream();
+    const audioEl = new Audio();
+    audioEl.autoplay = true;
+    audioEl.srcObject = remoteAudioStream;
+    remoteAudio[remoteUid] = audioEl;
+    applyPrefs(remoteUid);
 
     pc.ontrack = (event) => {
-        if (!remoteStream.getTracks().includes(event.track)) {
-            remoteStream.addTrack(event.track);
-            if (event.track.kind === 'audio') watchSpeaking(remoteUid, event.track);
+        if (event.track.kind === 'audio') {
+            if (remoteAudioStream.getTracks().includes(event.track)) return;
+            remoteAudioStream.addTrack(event.track);
+            playRemoteAudio(audioEl);
+            watchSpeaking(remoteUid, event.track);
+        } else if (!remoteVideoStream.getTracks().includes(event.track)) {
+            remoteVideoStream.addTrack(event.track);
         }
     };
 
+    pc.onicecandidateerror = (event) => {
+        console.warn('[call] ICE server error:', event.url, event.errorCode, event.errorText);
+    };
+
     pc.onconnectionstatechange = () => {
-        if (pc.connectionState === 'connected') tuneSenders(pc);
+        if (peerConnections[remoteUid] !== pc) return;
+
+        const state = pc.connectionState;
+        console.info(`[call] ${remoteName || remoteUid}: ${state}`);
+
+        if (state === 'connected') {
+            setTileConnection(remoteUid, 'connected');
+            tuneSenders(pc);
+        } else if (state === 'failed') {
+            setTileConnection(remoteUid, 'failed');
+            if (onFailed) onFailed();
+        } else {
+            setTileConnection(remoteUid, 'connecting');
+        }
     };
 
     return pc;
@@ -1211,10 +1324,19 @@ function listenForCandidates(pc, candidatesCol) {
     }));
 }
 
-async function callPeer(user, roomRef, remote) {
-    const pc = createPeer(remote.uid, remote.displayName, true);
+async function callPeer(user, roomRef, remote, attempt = 0) {
+    const pc = createPeer(remote.uid, remote.displayName, true, () => {
+        // Connection failed: try again with a new offer, a couple of times.
+        if (!inCall || attempt >= MAX_CALL_RETRIES) return;
+        setTimeout(() => {
+            if (inCall && peerConnections[remote.uid] === pc) {
+                callPeer(user, roomRef, remote, attempt + 1)
+                    .catch((err) => console.error('Retry failed:', err));
+            }
+        }, 1500);
+    });
 
-    const callRef = doc(roomRef, 'calls', `${user.uid}_${remote.uid}_${myJoinedMs}`);
+    const callRef = doc(roomRef, 'calls', `${user.uid}_${remote.uid}_${myJoinedMs}_${attempt}`);
     myCallDocRefs.push(callRef);
     const callerCandidates = collection(callRef, 'callerCandidates');
     const calleeCandidates = collection(callRef, 'calleeCandidates');
@@ -1356,7 +1478,7 @@ async function joinGroupCall(roomId = CALL_ROOM_ID) {
             displayName: currentDisplayName,
             micOn,
             camOn,
-            heartbeatMs: Date.now(),
+            heartbeatMs: nowMs(),
             joinedAt: serverTimestamp()
         });
 
@@ -1366,7 +1488,7 @@ async function joinGroupCall(roomId = CALL_ROOM_ID) {
 
         heartbeatTimer = setInterval(() => {
             if (myParticipantRef) {
-                updateDoc(myParticipantRef, { heartbeatMs: Date.now() }).catch(() => {});
+                updateDoc(myParticipantRef, { heartbeatMs: nowMs() }).catch(() => {});
             }
         }, HEARTBEAT_MS);
 
@@ -1405,6 +1527,7 @@ async function hangUpGroupCall() {
 
     closeTileMenu();
     stopAllSpeaking();
+    if (audioUnlock) audioUnlock.classList.add('hidden');
 
     callUnsubs.forEach((unsub) => unsub());
     callUnsubs = [];
