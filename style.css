@@ -242,24 +242,6 @@ html, body {
     background: #000;
 }
 
-/* ---------- AI image detection tag ---------- */
-
-.ai-tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    margin-top: 6px;
-    padding: 2px 9px;
-    background: #fef2f2;
-    color: #b91c1c;
-    border: 1px solid #fecaca;
-    border-radius: 999px;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
-}
-
 /* ---------- Reply UI ---------- */
 
 .reply-banner {
@@ -320,9 +302,19 @@ html, body {
     color: #111111;
 }
 
-.chat-reply-btn {
+.chat-message-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: auto;
+}
+
+.chat-reply-btn,
+.chat-react-btn,
+.chat-edit-btn,
+.chat-delete-btn {
     width: auto;
-    margin: 0 0 0 auto;
+    margin: 0;
     padding: 2px 8px;
     background: transparent;
     color: #71717a;
@@ -333,19 +325,153 @@ html, body {
 }
 
 .chat-message:hover .chat-reply-btn,
-.chat-reply-btn:focus-visible {
+.chat-message:hover .chat-react-btn,
+.chat-message:hover .chat-edit-btn,
+.chat-message:hover .chat-delete-btn,
+.chat-reply-btn:focus-visible,
+.chat-react-btn:focus-visible,
+.chat-edit-btn:focus-visible,
+.chat-delete-btn:focus-visible {
     opacity: 1;
 }
 
-.chat-reply-btn:hover {
+.chat-reply-btn:hover,
+.chat-react-btn:hover,
+.chat-edit-btn:hover {
     background: #e4e4e7;
     color: #111111;
 }
 
+.chat-delete-btn:hover {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
 @media (hover: none) {
-    .chat-reply-btn {
+    .chat-reply-btn,
+    .chat-react-btn,
+    .chat-edit-btn,
+    .chat-delete-btn {
         opacity: 1;
     }
+}
+
+/* ---------- Reactions ---------- */
+
+.chat-reactions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+}
+
+.reaction-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    width: auto;
+    margin: 0;
+    padding: 2px 8px;
+    background: #f4f4f5;
+    color: #3f3f46;
+    border: 1px solid #e4e4e7;
+    border-radius: 999px;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.reaction-pill:hover {
+    background: #ececf1;
+}
+
+.reaction-pill.mine {
+    background: #eef2ff;
+    border-color: #c7d2fe;
+    color: var(--accent);
+}
+
+.reaction-pill span {
+    font-variant-numeric: tabular-nums;
+    font-size: 11px;
+}
+
+.reaction-picker {
+    position: fixed;
+    z-index: 10000;
+    display: flex;
+    gap: 4px;
+    padding: 6px;
+    background: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+
+.reaction-picker-option {
+    width: 34px;
+    height: 34px;
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    border-radius: 8px;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.reaction-picker-option:hover {
+    background: #f0f0f5;
+}
+
+/* ---------- Edit-in-place ---------- */
+
+.edited-tag {
+    font-size: 11px;
+    color: #a1a1aa;
+    font-style: italic;
+}
+
+.chat-edit-form {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+    max-width: 320px;
+}
+
+.chat-edit-input {
+    width: 100%;
+    margin: 0;
+    padding: 6px 10px;
+    font-size: 14px;
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+}
+
+.chat-edit-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.chat-edit-actions button {
+    width: auto;
+    margin: 0;
+    padding: 5px 12px;
+    font-size: 12px;
+    border-radius: 6px;
+}
+
+.chat-edit-save {
+    background-color: #111111;
+    color: #ffffff;
+    border: 1px solid #111111;
+}
+
+.chat-edit-cancel {
+    background-color: #f4f4f5;
+    color: #111111;
+    border: 1px solid #e4e4e7;
 }
 
 .chat-reply-quote {

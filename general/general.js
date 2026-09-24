@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, collection, addDoc, query, where, orderBy, limit, onSnapshot, serverTimestamp, getDocs, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, collection, addDoc, query, where, orderBy, limit, onSnapshot, serverTimestamp, getDocs, deleteDoc, updateDoc, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-storage.js";
 
 const firebaseConfig = {
@@ -274,81 +274,150 @@ document.addEventListener('keydown', (e) => {
 });
 
 /* ------------------------------------------------------------------ */
-/* AI image detection (Walter)                                         */
+/* Message actions: reactions, edit, delete                            */
 /* ------------------------------------------------------------------ */
 
-// This key lives in client-side code, so it is visible to anyone who views
-// this page's source or opens dev tools. That's fine for a personal/hobby
-// project, but before this goes anywhere public, move this call behind a
-// small backend (e.g. a Firebase Cloud Function) that holds the key
-// server-side, and have the client call that instead.
-const WALTER_API_KEY = "wltr_sv1yPyVlDw-2icbiF_XdErwG9B4WIwSpMrh8Gqnx_X4";
-const WALTER_DETECT_URL = "https://developer-portal.walterwrites.ai/api/image-detector/predict/";
+const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+let reactionPickerEl = null;
+let reactionPickerMessageId = null;
 
-// Detections run one at a time with a gap between them so a burst of images
-// loading at once doesn't blow through Walter's per-minute rate limit.
-// Trial keys are limited to 5 requests/min; raise this delay if you're on
-// the trial plan, or lower it once you're on a paid plan with more headroom.
-const WALTER_REQUEST_GAP_MS = 2500;
-
-const aiDetectionCache = new Map(); // messageId -> 'fake' | 'inpainting' | 'real' | null
-let aiDetectionQueue = Promise.resolve();
-
-function queueAiDetection(task) {
-    aiDetectionQueue = aiDetectionQueue
-        .then(task)
-        .catch((err) => console.warn('AI image detection failed:', err))
-        .then(() => new Promise((resolve) => setTimeout(resolve, WALTER_REQUEST_GAP_MS)));
-    return aiDetectionQueue;
-}
-
-async function detectAiImage(messageId, imageDataUrl) {
-    if (aiDetectionCache.has(messageId)) return aiDetectionCache.get(messageId);
-
-    const blob = await (await fetch(imageDataUrl)).blob();
-    const form = new FormData();
-    form.append('file', blob, 'image.jpg');
-
-    const response = await fetch(WALTER_DETECT_URL, {
-        method: 'POST',
-        headers: { 'X-API-Key': WALTER_API_KEY },
-        body: form
-    });
-
-    if (!response.ok) {
-        aiDetectionCache.set(messageId, null);
-        return null;
+function closeReactionPicker() {
+    if (reactionPickerEl) {
+        reactionPickerEl.remove();
+        reactionPickerEl = null;
     }
-
-    const data = await response.json();
-    const verdict = (data.prediction === 'fake' || data.prediction === 'inpainting') ? data.prediction : 'real';
-    aiDetectionCache.set(messageId, verdict);
-    return verdict;
+    reactionPickerMessageId = null;
 }
 
-function applyAiTag(messageId, verdict) {
-    if (verdict !== 'fake' && verdict !== 'inpainting') return;
-    if (!messageBox) return;
-
-    const tile = messageBox.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`);
-    const img = tile ? tile.querySelector('.chat-message-image') : null;
-    if (!img || !img.parentElement) return;
-    if (img.parentElement.querySelector('.ai-tag')) return;
-
-    const tag = document.createElement('span');
-    tag.className = 'ai-tag';
-    tag.textContent = verdict === 'inpainting' ? 'AI Edited' : 'AI Generated';
-    img.parentElement.appendChild(tag);
-}
-
-function requestAiTag(messageId, imageDataUrl) {
-    if (aiDetectionCache.has(messageId)) {
-        applyAiTag(messageId, aiDetectionCache.get(messageId));
+function openReactionPicker(messageId, anchorBtn) {
+    if (reactionPickerMessageId === messageId) {
+        closeReactionPicker();
         return;
     }
-    queueAiDetection(() =>
-        detectAiImage(messageId, imageDataUrl).then((verdict) => applyAiTag(messageId, verdict))
-    );
+    closeReactionPicker();
+
+    const picker = document.createElement('div');
+    picker.className = 'reaction-picker';
+    picker.setAttribute('role', 'menu');
+    picker.setAttribute('aria-label', 'Add a reaction');
+
+    REACTION_EMOJIS.forEach((emoji) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'reaction-picker-option';
+        btn.textContent = emoji;
+        btn.setAttribute('aria-label', `React with ${emoji}`);
+        btn.addEventListener('click', () => {
+            toggleReaction(messageId, emoji);
+            closeReactionPicker();
+        });
+        picker.appendChild(btn);
+    });
+
+    document.body.appendChild(picker);
+
+    const rect = anchorBtn.getBoundingClientRect();
+    const pickerRect = picker.getBoundingClientRect();
+    let left = rect.left + rect.width / 2 - pickerRect.width / 2;
+    left = Math.max(8, Math.min(left, window.innerWidth - pickerRect.width - 8));
+    let top = rect.top - pickerRect.height - 8;
+    if (top < 8) top = rect.bottom + 8;
+    picker.style.left = `${left}px`;
+    picker.style.top = `${top}px`;
+
+    reactionPickerEl = picker;
+    reactionPickerMessageId = messageId;
+}
+
+document.addEventListener('mousedown', (event) => {
+    if (!reactionPickerEl || reactionPickerEl.contains(event.target)) return;
+    if (event.target.closest && event.target.closest('.chat-react-btn')) return;
+    closeReactionPicker();
+});
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && reactionPickerEl) closeReactionPicker();
+});
+window.addEventListener('resize', closeReactionPicker);
+
+async function toggleReaction(messageId, emoji) {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    const msgRef = doc(db, 'messages', messageId);
+    try {
+        const snap = await getDoc(msgRef);
+        if (!snap.exists()) return;
+        const reactions = snap.data().reactions || {};
+        const already = (reactions[emoji] || []).includes(user.uid);
+        await updateDoc(msgRef, {
+            [`reactions.${emoji}`]: already ? arrayRemove(user.uid) : arrayUnion(user.uid)
+        });
+    } catch (err) {
+        console.error('Error toggling reaction:', err);
+    }
+}
+
+function renderReactionsHtml(msg) {
+    const reactions = msg.reactions || {};
+    const myUid = auth.currentUser ? auth.currentUser.uid : null;
+    const entries = Object.entries(reactions).filter(([, uids]) => Array.isArray(uids) && uids.length > 0);
+    if (!entries.length) return '';
+
+    const pills = entries.map(([emoji, uids]) => {
+        const mine = myUid && uids.includes(myUid);
+        const safeEmoji = escapeHtml(emoji);
+        return `<button type="button" class="reaction-pill${mine ? ' mine' : ''}" data-emoji="${safeEmoji}" title="${uids.length} reacted">${safeEmoji} <span>${uids.length}</span></button>`;
+    }).join('');
+
+    return `<div class="chat-reactions">${pills}</div>`;
+}
+
+async function deleteOwnMessage(messageId) {
+    if (!confirm('Delete this message? This cannot be undone.')) return;
+    try {
+        await deleteDoc(doc(db, 'messages', messageId));
+    } catch (err) {
+        console.error('Error deleting message:', err);
+        alert('Could not delete the message. Please try again.');
+    }
+}
+
+function enterEditMode(div, msg) {
+    const body = div.querySelector('.chat-message-body');
+    if (!body || body.querySelector('.chat-edit-form')) return;
+
+    const original = body.innerHTML;
+    body.innerHTML = `
+        <div class="chat-edit-form">
+            <input type="text" class="chat-edit-input" value="${escapeHtml(msg.text || '')}">
+            <div class="chat-edit-actions">
+                <button type="button" class="chat-edit-save">Save</button>
+                <button type="button" class="chat-edit-cancel">Cancel</button>
+            </div>
+        </div>
+    `;
+
+    const input = body.querySelector('.chat-edit-input');
+    const cancel = () => { body.innerHTML = original; };
+    const save = async () => {
+        const newText = input.value.trim();
+        if (!newText) return;
+        try {
+            await updateDoc(doc(db, 'messages', msg.id), { text: newText, edited: true });
+        } catch (err) {
+            console.error('Error editing message:', err);
+            alert('Could not save your edit. Please try again.');
+        }
+    };
+
+    body.querySelector('.chat-edit-save').addEventListener('click', save);
+    body.querySelector('.chat-edit-cancel').addEventListener('click', cancel);
+    input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') save();
+        if (event.key === 'Escape') cancel();
+    });
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
 }
 
 /* ------------------------------------------------------------------ */
@@ -401,9 +470,12 @@ function initChat() {
 
             const senderPic = isSafeImageSrc(msg.profilePic) ? msg.profilePic : defaultAvatar;
 
+            const isOwn = !!(auth.currentUser && msg.uid === auth.currentUser.uid);
+
             let contentHtml = '';
             if (msg.text) {
-                contentHtml += `<span>${formatMessageText(msg.text)}</span>`;
+                contentHtml += `<span class="chat-message-text">${formatMessageText(msg.text)}</span>`;
+                if (msg.edited) contentHtml += `<span class="edited-tag"> (edited)</span>`;
             }
             if (msg.imageUrl && isSafeImageSrc(msg.imageUrl)) {
                 contentHtml += `<div style="margin-top: 6px;"><img src="${msg.imageUrl}" class="chat-message-image clickable-image" alt="Attached image" /></div>`;
@@ -421,29 +493,52 @@ function initChat() {
                     </button>`;
             }
 
+            const editBtnHtml = (isOwn && msg.text)
+                ? `<button type="button" class="chat-edit-btn" title="Edit" aria-label="Edit message"><i class="fa-solid fa-pen"></i></button>`
+                : '';
+            const deleteBtnHtml = isOwn
+                ? `<button type="button" class="chat-delete-btn" title="Delete" aria-label="Delete message"><i class="fa-solid fa-trash"></i></button>`
+                : '';
+
             div.innerHTML = `
                 <img src="${senderPic}" alt="" class="chat-profile-pic" onerror="this.src='${defaultAvatar}'">
                 <div class="chat-message-content">
                     ${quoteHtml}
                     <div class="chat-message-header">
                         <span class="chat-sender-name">${senderDisplay}</span>
-                        <button type="button" class="chat-reply-btn" title="Reply" aria-label="Reply to ${senderDisplay}">
-                            <i class="fa-solid fa-reply"></i>
-                        </button>
+                        <div class="chat-message-actions">
+                            ${editBtnHtml}
+                            ${deleteBtnHtml}
+                            <button type="button" class="chat-react-btn" title="Add reaction" aria-label="Add reaction to message from ${senderDisplay}">
+                                <i class="fa-regular fa-face-smile"></i>
+                            </button>
+                            <button type="button" class="chat-reply-btn" title="Reply" aria-label="Reply to ${senderDisplay}">
+                                <i class="fa-solid fa-reply"></i>
+                            </button>
+                        </div>
                     </div>
                     <div class="chat-message-body">${contentHtml}</div>
+                    ${renderReactionsHtml(msg)}
                 </div>
             `;
 
             div.querySelector('.chat-reply-btn').addEventListener('click', () => setReplyTarget(msg));
+            div.querySelector('.chat-react-btn').addEventListener('click', (event) => openReactionPicker(msg.id, event.currentTarget));
+
+            const editBtn = div.querySelector('.chat-edit-btn');
+            if (editBtn) editBtn.addEventListener('click', () => enterEditMode(div, msg));
+
+            const deleteBtn = div.querySelector('.chat-delete-btn');
+            if (deleteBtn) deleteBtn.addEventListener('click', () => deleteOwnMessage(msg.id));
+
+            div.querySelectorAll('.reaction-pill').forEach((pill) => {
+                pill.addEventListener('click', () => toggleReaction(msg.id, pill.dataset.emoji));
+            });
+
             const quote = div.querySelector('.chat-reply-quote');
             if (quote) quote.addEventListener('click', () => jumpToMessage(msg.replyTo.id));
 
             messageBox.appendChild(div);
-
-            if (msg.imageUrl && isSafeImageSrc(msg.imageUrl)) {
-                requestAiTag(msg.id, msg.imageUrl);
-            }
         });
 
         messageBox.querySelectorAll('.clickable-image').forEach((img) => {
