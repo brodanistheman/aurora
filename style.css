@@ -242,6 +242,24 @@ html, body {
     background: #000;
 }
 
+/* ---------- AI image detection tag ---------- */
+
+.ai-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 6px;
+    padding: 2px 9px;
+    background: #fef2f2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
 /* ---------- Reply UI ---------- */
 
 .reply-banner {

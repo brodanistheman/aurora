@@ -274,6 +274,84 @@ document.addEventListener('keydown', (e) => {
 });
 
 /* ------------------------------------------------------------------ */
+/* AI image detection (Walter)                                         */
+/* ------------------------------------------------------------------ */
+
+// This key lives in client-side code, so it is visible to anyone who views
+// this page's source or opens dev tools. That's fine for a personal/hobby
+// project, but before this goes anywhere public, move this call behind a
+// small backend (e.g. a Firebase Cloud Function) that holds the key
+// server-side, and have the client call that instead.
+const WALTER_API_KEY = "wltr_sv1yPyVlDw-2icbiF_XdErwG9B4WIwSpMrh8Gqnx_X4";
+const WALTER_DETECT_URL = "https://developer-portal.walterwrites.ai/api/image-detector/predict/";
+
+// Detections run one at a time with a gap between them so a burst of images
+// loading at once doesn't blow through Walter's per-minute rate limit.
+// Trial keys are limited to 5 requests/min; raise this delay if you're on
+// the trial plan, or lower it once you're on a paid plan with more headroom.
+const WALTER_REQUEST_GAP_MS = 2500;
+
+const aiDetectionCache = new Map(); // messageId -> 'fake' | 'inpainting' | 'real' | null
+let aiDetectionQueue = Promise.resolve();
+
+function queueAiDetection(task) {
+    aiDetectionQueue = aiDetectionQueue
+        .then(task)
+        .catch((err) => console.warn('AI image detection failed:', err))
+        .then(() => new Promise((resolve) => setTimeout(resolve, WALTER_REQUEST_GAP_MS)));
+    return aiDetectionQueue;
+}
+
+async function detectAiImage(messageId, imageDataUrl) {
+    if (aiDetectionCache.has(messageId)) return aiDetectionCache.get(messageId);
+
+    const blob = await (await fetch(imageDataUrl)).blob();
+    const form = new FormData();
+    form.append('file', blob, 'image.jpg');
+
+    const response = await fetch(WALTER_DETECT_URL, {
+        method: 'POST',
+        headers: { 'X-API-Key': WALTER_API_KEY },
+        body: form
+    });
+
+    if (!response.ok) {
+        aiDetectionCache.set(messageId, null);
+        return null;
+    }
+
+    const data = await response.json();
+    const verdict = (data.prediction === 'fake' || data.prediction === 'inpainting') ? data.prediction : 'real';
+    aiDetectionCache.set(messageId, verdict);
+    return verdict;
+}
+
+function applyAiTag(messageId, verdict) {
+    if (verdict !== 'fake' && verdict !== 'inpainting') return;
+    if (!messageBox) return;
+
+    const tile = messageBox.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`);
+    const img = tile ? tile.querySelector('.chat-message-image') : null;
+    if (!img || !img.parentElement) return;
+    if (img.parentElement.querySelector('.ai-tag')) return;
+
+    const tag = document.createElement('span');
+    tag.className = 'ai-tag';
+    tag.textContent = verdict === 'inpainting' ? 'AI Edited' : 'AI Generated';
+    img.parentElement.appendChild(tag);
+}
+
+function requestAiTag(messageId, imageDataUrl) {
+    if (aiDetectionCache.has(messageId)) {
+        applyAiTag(messageId, aiDetectionCache.get(messageId));
+        return;
+    }
+    queueAiDetection(() =>
+        detectAiImage(messageId, imageDataUrl).then((verdict) => applyAiTag(messageId, verdict))
+    );
+}
+
+/* ------------------------------------------------------------------ */
 /* Chat                                                                */
 /* ------------------------------------------------------------------ */
 
@@ -362,6 +440,10 @@ function initChat() {
             if (quote) quote.addEventListener('click', () => jumpToMessage(msg.replyTo.id));
 
             messageBox.appendChild(div);
+
+            if (msg.imageUrl && isSafeImageSrc(msg.imageUrl)) {
+                requestAiTag(msg.id, msg.imageUrl);
+            }
         });
 
         messageBox.querySelectorAll('.clickable-image').forEach((img) => {
