@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Aurora</title>
+    <script>
+        const t = localStorage.getItem('aurora_theme');
+        if (t) document.documentElement.setAttribute('data-theme', t);
+    </script>
 </head>
 <body>
     <script type="module">
@@ -50,10 +54,10 @@
 
         function loadProfileView(userId) {
             document.body.innerHTML = `
-                <div style="background:#121212; color:#fff; padding:40px; font-family:sans-serif;">
+                <div style="background:var(--bg, #17171c); color:var(--text, #fff); padding:40px; font-family:sans-serif;">
                     <h2>User Profile: ${userId}</h2>
                     <p>Loading profile data from Firestore...</p>
-                    <a href="/aurora/general/" style="color:#fff;">Back to General Chat</a>
+                    <a href="/aurora/general/" style="color:var(--text, #fff);">Back to General Chat</a>
                 </div>
             `;
         }

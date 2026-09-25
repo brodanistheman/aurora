@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Aurora</title>
     <link rel="stylesheet" href="../style.css">
+    <script>
+        const t = localStorage.getItem('aurora_theme');
+        if (t) document.documentElement.setAttribute('data-theme', t);
+    </script>
 </head>
 <body>
     <div class="dashboard-container">

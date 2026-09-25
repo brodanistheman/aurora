@@ -7,6 +7,10 @@
     <title>Aurora</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../style.css">
+    <script>
+        const t = localStorage.getItem('aurora_theme');
+        if (t) document.documentElement.setAttribute('data-theme', t);
+    </script>
 </head>
 <body>
     <div class="dashboard-layout">

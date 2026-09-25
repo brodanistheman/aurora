@@ -5,11 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Settings - Aurora</title>
     <link rel="stylesheet" href="/aurora/style.css">
+    <script>
+        const t = localStorage.getItem('aurora_theme');
+        if (t) document.documentElement.setAttribute('data-theme', t);
+    </script>
 </head>
 <body>
     <div class="dashboard-container">
         <h1>Settings</h1>
-        <p style="margin-bottom: 24px; font-size: 14px; color: #333333;">Manage your account and preferences.</p>
+        <p style="margin-bottom: 24px; font-size: 14px; color: var(--muted-text);">Manage your account and preferences.</p>
         
         <div class="button-group">
             <button onclick="window.location.href='/aurora/settings/account/'">Account Management</button>
