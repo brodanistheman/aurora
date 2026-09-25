@@ -2,6 +2,17 @@
 
 :root {
     --accent: #4f46e5;
+    --bg: #f4f4f9;
+    --text: #111111;
+    --card-bg: #ffffff;
+    --card-border: #e0e0e0;
+}
+
+[data-theme="dark"] {
+    --bg: #17171c;
+    --text: #f1f1f4;
+    --card-bg: #1e1e24;
+    --card-border: #333338;
 }
 
 * {
@@ -16,8 +27,8 @@ html, body {
     width: 100%;
     height: 100%;
     font-family: 'Inter', sans-serif;
-    background: #f4f4f9;
-    color: #111111;
+    background: var(--bg);
+    color: var(--text);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -242,8 +253,6 @@ html, body {
     background: #000;
 }
 
-/* ---------- Reply UI ---------- */
-
 .reply-banner {
     display: flex;
     align-items: center;
@@ -356,8 +365,6 @@ html, body {
     }
 }
 
-/* ---------- Reactions ---------- */
-
 .chat-reactions {
     display: flex;
     flex-wrap: wrap;
@@ -423,8 +430,6 @@ html, body {
 .reaction-picker-option:hover {
     background: #f0f0f5;
 }
-
-/* ---------- Edit-in-place ---------- */
 
 .edited-tag {
     font-size: 11px;
@@ -511,8 +516,6 @@ html, body {
     background: #eef2ff;
 }
 
-/* ---------- Image lightbox ---------- */
-
 .image-modal {
     position: fixed;
     z-index: 9999;
@@ -565,8 +568,8 @@ html, body {
 }
 
 .login-container {
-    background-color: #ffffff;
-    border: 1px solid #e0e0e0;
+    background-color: var(--card-bg);
+    border: 1px solid var(--card-border);
     padding: 40px;
     width: 100%;
     max-width: 400px;
@@ -579,7 +582,7 @@ h1, h2 {
     margin-bottom: 24px;
     font-size: 24px;
     letter-spacing: -0.02em;
-    color: #111111;
+    color: var(--text);
 }
 
 input {
@@ -672,8 +675,8 @@ button:hover {
     max-width: 600px;
     margin: 40px auto;
     padding: 30px;
-    background: #ffffff;
-    border: 1px solid #e0e0e0;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
     border-radius: 8px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
@@ -830,6 +833,69 @@ label[for="profile-pic-input"] {
     white-space: nowrap;
 }
 
+.theme-toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 0;
+}
+
+.theme-toggle-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text);
+}
+
+.theme-switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+}
+
+.theme-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.theme-switch-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #cccccc;
+    border-radius: 999px;
+    transition: background-color 0.15s ease;
+}
+
+.theme-switch-slider::before {
+    content: '';
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: #ffffff;
+    border-radius: 50%;
+    transition: transform 0.15s ease;
+}
+
+.theme-switch input:checked + .theme-switch-slider {
+    background-color: var(--accent);
+}
+
+.theme-switch input:checked + .theme-switch-slider::before {
+    transform: translateX(20px);
+}
+
+.theme-switch input:focus-visible + .theme-switch-slider {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
 @media (max-width: 720px) {
     .dashboard-layout {
         flex-direction: column;
@@ -875,10 +941,6 @@ label[for="profile-pic-input"] {
         height: 70vh;
     }
 }
-
-/* ================================================================== */
-/* Group call                                                          */
-/* ================================================================== */
 
 :root {
     --call-accent: #047857;
@@ -1051,9 +1113,6 @@ label[for="profile-pic-input"] {
     display: none;
 }
 
-/* Floating call window (no full-screen backdrop, so the chat stays usable).
-   Note: don't add backdrop-filter / transform here, either would make the
-   fixed-position tile menu position itself relative to this box. */
 .call-modal {
     position: fixed;
     top: 20px;
@@ -1137,8 +1196,6 @@ label[for="profile-pic-input"] {
     color: #e5e8f2;
 }
 
-/* Grid: auto-fit columns, each tile keeps a 16:9 shape and a minimum size.
-   Extra rows scroll instead of squashing the tiles. */
 .video-grid {
     flex: 1;
     min-height: 0;
@@ -1169,7 +1226,6 @@ label[for="profile-pic-input"] {
     border-radius: 14px;
 }
 
-/* The video is taken out of flow so it can't push the tile taller than 16:9 */
 .video-tile video {
     position: absolute;
     inset: 0;
