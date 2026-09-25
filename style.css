@@ -529,7 +529,7 @@ html, body {
 }
 
 .chat-message.is-highlighted {
-    background: #eef2ff;
+    background: rgba(79, 70, 229, 0.14);
 }
 
 .image-modal {
