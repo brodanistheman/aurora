@@ -728,6 +728,18 @@ let inCall = false;
 let micOn = true;
 let camOn = false;
 let camBusy = false;
+let isScreenSharing = false;
+let screenShareBusy = false;
+let screenStream = null;
+let isSharingDeviceAudio = false;
+let audioShareBusy = false;
+let systemAudioStream = null;
+let systemAudioTrack = null;
+let audioMixContext = null;
+let audioMixDestination = null;
+let micMixSource = null;
+let systemMixSource = null;
+let currentAudioTrack = null;
 let roomParticipants = [];
 let roomWatchStarted = false;
 const answeredCalls = new Set();
@@ -739,6 +751,8 @@ const videoGrid = document.getElementById('video-grid');
 const hangupButton = document.getElementById('hangup-button');
 const micButton = document.getElementById('mic-button');
 const camButton = document.getElementById('cam-button');
+const screenShareButton = document.getElementById('screen-share-button');
+const audioShareButton = document.getElementById('audio-share-button');
 const callStatus = document.getElementById('call-status');
 const callCount = document.getElementById('call-count');
 const groupCallButton = document.getElementById('group-call-btn');
@@ -911,9 +925,11 @@ function buildTile(id, name, isLocal) {
     micIcon.className = 'fa-solid fa-microphone-slash mic-icon';
     const deafenIcon = document.createElement('i');
     deafenIcon.className = 'fa-solid fa-volume-xmark deafen-icon';
+    const presentingIcon = document.createElement('i');
+    presentingIcon.className = 'fa-solid fa-display presenting-icon';
     const nameEl = document.createElement('span');
     nameEl.textContent = isLocal ? 'You' : (name || 'Anonymous');
-    label.append(micIcon, deafenIcon, nameEl);
+    label.append(micIcon, deafenIcon, presentingIcon, nameEl);
 
     if (!isLocal) {
         tile.tabIndex = 0;
@@ -1257,6 +1273,24 @@ function updateControls() {
         camButton.querySelector('i').className = camOn ? 'fa-solid fa-video' : 'fa-solid fa-video-slash';
     }
 
+    if (screenShareButton) {
+        screenShareButton.disabled = !localStream || screenShareBusy;
+        screenShareButton.classList.toggle('is-active', isScreenSharing);
+        screenShareButton.setAttribute('aria-pressed', String(isScreenSharing));
+        const label = isScreenSharing ? 'Stop sharing your screen' : 'Share your screen';
+        screenShareButton.setAttribute('aria-label', label);
+        screenShareButton.title = label;
+    }
+
+    if (audioShareButton) {
+        audioShareButton.disabled = !localStream || audioShareBusy;
+        audioShareButton.classList.toggle('is-active', isSharingDeviceAudio);
+        audioShareButton.setAttribute('aria-pressed', String(isSharingDeviceAudio));
+        const label = isSharingDeviceAudio ? 'Stop playing device audio to others' : 'Play device audio to others';
+        audioShareButton.setAttribute('aria-label', label);
+        audioShareButton.title = label;
+    }
+
     setTileState('local', { micOn, camOn });
 }
 
@@ -1293,6 +1327,198 @@ async function setOutgoingVideo(track) {
     }));
 }
 
+async function setOutgoingAudio(track) {
+    currentAudioTrack = track;
+    await Promise.all(Object.values(peerConnections).map(async (pc) => {
+        const sender = pc.getSenders().find((s) => s.track && s.track.kind === 'audio');
+        if (!sender) return;
+        try {
+            await sender.replaceTrack(track);
+        } catch (err) {
+            console.warn('Could not swap audio track:', err);
+        }
+    }));
+}
+
+/* ------------------------------------------------------------------ */
+/* Screen sharing ("streaming")                                        */
+/*                                                                      */
+/* Screen share and the camera both use the single video slot reserved */
+/* on each peer connection, so turning one on turns the other off.     */
+/* ------------------------------------------------------------------ */
+
+function setLocalTilePresenting(presenting, stream) {
+    const tile = getTile('local');
+    if (!tile) return;
+    tile.classList.toggle('screen-sharing', presenting);
+    const video = tile.querySelector('video');
+    if (video) video.srcObject = presenting ? stream : localStream;
+}
+
+async function toggleScreenShare() {
+    if (!localStream || screenShareBusy) return;
+
+    if (isScreenSharing) {
+        await stopScreenShare();
+        return;
+    }
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+        alert('Screen sharing is not supported in this browser.');
+        return;
+    }
+
+    screenShareBusy = true;
+    updateControls();
+
+    if (camOn) await stopCamera();
+
+    let stream;
+    try {
+        stream = await navigator.mediaDevices.getDisplayMedia({
+            video: { frameRate: { ideal: 15, max: 30 } },
+            audio: false
+        });
+    } catch (err) {
+        console.warn('Screen share cancelled or unavailable.', err);
+        screenShareBusy = false;
+        updateControls();
+        return;
+    }
+
+    const track = stream.getVideoTracks()[0];
+    screenStream = stream;
+    isScreenSharing = true;
+    track.addEventListener('ended', () => {
+        if (isScreenSharing) stopScreenShare();
+    });
+
+    await setOutgoingVideo(track);
+    setLocalTilePresenting(true, stream);
+
+    screenShareBusy = false;
+    updateControls();
+}
+
+async function stopScreenShare() {
+    if (screenStream) {
+        screenStream.getTracks().forEach((t) => t.stop());
+        screenStream = null;
+    }
+    isScreenSharing = false;
+    await setOutgoingVideo(null);
+    setLocalTilePresenting(false, null);
+    updateControls();
+}
+
+/* ------------------------------------------------------------------ */
+/* Device audio sharing                                                */
+/*                                                                      */
+/* Browsers only expose system/tab audio capture through the screen-   */
+/* share picker, so we ask for a screen source but immediately discard */
+/* the video track, keeping just the audio. It's mixed with the mic    */
+/* (via Web Audio) into one outgoing track so peers hear both. Nothing */
+/* is played locally — the person already hears their own audio.       */
+/* ------------------------------------------------------------------ */
+
+async function toggleDeviceAudioShare() {
+    if (!localStream || audioShareBusy) return;
+
+    if (isSharingDeviceAudio) {
+        await stopDeviceAudioShare();
+        return;
+    }
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+        alert('Sharing device audio is not supported in this browser.');
+        return;
+    }
+
+    audioShareBusy = true;
+    updateControls();
+
+    let stream;
+    try {
+        stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+    } catch (err) {
+        console.warn('Device audio share cancelled or unavailable.', err);
+        audioShareBusy = false;
+        updateControls();
+        return;
+    }
+
+    stream.getVideoTracks().forEach((t) => t.stop());
+    const audioTrack = stream.getAudioTracks()[0];
+
+    if (!audioTrack) {
+        alert('That tab, window or screen isn\'t sharing audio. Try again and make sure "Share audio" is checked, or pick a tab that\'s currently playing sound.');
+        stream.getTracks().forEach((t) => t.stop());
+        audioShareBusy = false;
+        updateControls();
+        return;
+    }
+
+    try {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        audioMixContext = new Ctx();
+        audioMixDestination = audioMixContext.createMediaStreamDestination();
+
+        const micTrack = localStream.getAudioTracks()[0];
+        if (micTrack) {
+            micMixSource = audioMixContext.createMediaStreamSource(new MediaStream([micTrack]));
+            micMixSource.connect(audioMixDestination);
+        }
+
+        systemMixSource = audioMixContext.createMediaStreamSource(new MediaStream([audioTrack]));
+        systemMixSource.connect(audioMixDestination);
+
+        systemAudioStream = stream;
+        systemAudioTrack = audioTrack;
+        audioTrack.addEventListener('ended', () => {
+            if (isSharingDeviceAudio) stopDeviceAudioShare();
+        });
+
+        const mixedTrack = audioMixDestination.stream.getAudioTracks()[0];
+        await setOutgoingAudio(mixedTrack);
+        isSharingDeviceAudio = true;
+    } catch (err) {
+        console.error('Could not mix device audio into the call:', err);
+        alert('Could not share device audio in this browser.');
+        stream.getTracks().forEach((t) => t.stop());
+        systemAudioStream = null;
+        systemAudioTrack = null;
+    }
+
+    audioShareBusy = false;
+    updateControls();
+}
+
+async function stopDeviceAudioShare() {
+    isSharingDeviceAudio = false;
+
+    if (systemAudioStream) {
+        systemAudioStream.getTracks().forEach((t) => t.stop());
+        systemAudioStream = null;
+        systemAudioTrack = null;
+    }
+    if (micMixSource) {
+        try { micMixSource.disconnect(); } catch (err) {}
+        micMixSource = null;
+    }
+    if (systemMixSource) {
+        try { systemMixSource.disconnect(); } catch (err) {}
+        systemMixSource = null;
+    }
+    if (audioMixContext) {
+        audioMixContext.close().catch(() => {});
+        audioMixContext = null;
+    }
+    audioMixDestination = null;
+
+    await setOutgoingAudio(localStream ? localStream.getAudioTracks()[0] : null);
+    updateControls();
+}
+
 async function startCamera() {
     let camStream;
     try {
@@ -1321,6 +1547,7 @@ async function toggleCamera() {
     camBusy = true;
     updateControls();
     try {
+        if (isScreenSharing) await stopScreenShare();
         if (camOn) {
             await stopCamera();
         } else {
@@ -1335,6 +1562,8 @@ async function toggleCamera() {
 
 if (micButton) micButton.addEventListener('click', toggleMic);
 if (camButton) camButton.addEventListener('click', toggleCamera);
+if (screenShareButton) screenShareButton.addEventListener('click', toggleScreenShare);
+if (audioShareButton) audioShareButton.addEventListener('click', toggleDeviceAudioShare);
 if (hangupButton) hangupButton.addEventListener('click', hangUpGroupCall);
 
 const AUDIO_CONSTRAINTS = {
@@ -1361,6 +1590,7 @@ async function startLocalMedia() {
 
     micOn = true;
     camOn = false;
+    currentAudioTrack = localStream.getAudioTracks()[0];
     return true;
 }
 
@@ -1395,13 +1625,19 @@ function createPeer(remoteUid, remoteName, isCaller = false, onFailed = null) {
     const pc = new RTCPeerConnection(servers);
     peerConnections[remoteUid] = pc;
 
-    localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
-
-    // Reserve a video slot in the offer so the camera can be attached later
-    // with replaceTrack() and no renegotiation.
-    if (isCaller && !localStream.getVideoTracks().length) {
+    // Video and audio are added explicitly (rather than looping over
+    // localStream's tracks) so a peer who joins mid-share picks up whatever
+    // is currently going out — the screen instead of the camera, or the
+    // mixed mic+device-audio track instead of the raw mic.
+    const outgoingVideoTrack = isScreenSharing && screenStream ? screenStream.getVideoTracks()[0] : localStream.getVideoTracks()[0];
+    if (outgoingVideoTrack) {
+        pc.addTrack(outgoingVideoTrack, localStream);
+    } else if (isCaller) {
+        // Reserve a video slot in the offer so the camera or a screen share
+        // can be attached later with replaceTrack() and no renegotiation.
         pc.addTransceiver('video', { direction: 'sendrecv' });
     }
+    pc.addTrack(currentAudioTrack || localStream.getAudioTracks()[0], localStream);
 
     // Picture and sound are played separately. The tile's <video> only shows
     // the picture (always muted); sound comes from a dedicated <audio> element,
@@ -1627,6 +1863,11 @@ async function joinGroupCall(roomId = CALL_ROOM_ID) {
     const user = auth.currentUser;
     if (!user || inCall) return;
 
+    isScreenSharing = false;
+    screenShareBusy = false;
+    isSharingDeviceAudio = false;
+    audioShareBusy = false;
+
     inCall = true;
     renderCallPresence();
 
@@ -1720,6 +1961,35 @@ async function hangUpGroupCall() {
         localStream.getTracks().forEach((track) => track.stop());
         localStream = null;
     }
+
+    if (screenStream) {
+        screenStream.getTracks().forEach((track) => track.stop());
+        screenStream = null;
+    }
+    isScreenSharing = false;
+    screenShareBusy = false;
+
+    if (systemAudioStream) {
+        systemAudioStream.getTracks().forEach((track) => track.stop());
+        systemAudioStream = null;
+        systemAudioTrack = null;
+    }
+    if (micMixSource) {
+        try { micMixSource.disconnect(); } catch (err) {}
+        micMixSource = null;
+    }
+    if (systemMixSource) {
+        try { systemMixSource.disconnect(); } catch (err) {}
+        systemMixSource = null;
+    }
+    if (audioMixContext) {
+        audioMixContext.close().catch(() => {});
+        audioMixContext = null;
+    }
+    audioMixDestination = null;
+    isSharingDeviceAudio = false;
+    audioShareBusy = false;
+    currentAudioTrack = null;
 
     camOn = false;
     camBusy = false;

@@ -1258,6 +1258,12 @@ label[for="profile-pic-input"] {
     transform: scaleX(-1);
 }
 
+.video-tile.local.screen-sharing video {
+    transform: none;
+    object-fit: contain;
+    background: #000;
+}
+
 .video-tile.cam-off video,
 .video-tile.video-hidden video {
     visibility: hidden;
@@ -1319,6 +1325,10 @@ label[for="profile-pic-input"] {
     box-shadow: 0 0 0 3px var(--call-live);
 }
 
+.video-tile.screen-sharing::after {
+    border-color: #6366f1;
+}
+
 .tile-label {
     position: absolute;
     left: 10px;
@@ -1346,6 +1356,16 @@ label[for="profile-pic-input"] {
     display: none;
     font-size: 11px;
     color: #ff8b8f;
+}
+
+.tile-label .presenting-icon {
+    display: none;
+    font-size: 11px;
+    color: #a5b4fc;
+}
+
+.video-tile.screen-sharing .tile-label .presenting-icon {
+    display: inline;
 }
 
 .tile-status {
@@ -1402,6 +1422,7 @@ label[for="profile-pic-input"] {
     align-items: center;
     justify-content: center;
     gap: 12px;
+    flex-wrap: wrap;
 }
 
 .call-btn {
@@ -1429,6 +1450,12 @@ label[for="profile-pic-input"] {
 .call-btn.is-off:hover {
     background-color: #ffffff;
     color: #151823;
+}
+
+.call-btn.is-active,
+.call-btn.is-active:hover {
+    background-color: var(--call-live);
+    color: #ffffff;
 }
 
 .call-btn:disabled,
@@ -1473,6 +1500,12 @@ label[for="profile-pic-input"] {
 
     .video-grid {
         --tile-min: 140px;
+    }
+
+    .call-btn {
+        width: 46px;
+        height: 46px;
+        font-size: 15px;
     }
 }
 
