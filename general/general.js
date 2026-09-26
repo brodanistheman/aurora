@@ -760,6 +760,35 @@ const groupCallLabel = document.getElementById('group-call-label');
 const callPanel = document.getElementById('call-panel');
 const callPanelStatus = document.getElementById('call-panel-status');
 const audioUnlock = document.getElementById('audio-unlock');
+const streamOverlay = document.getElementById('stream-overlay');
+const streamOverlayBack = document.getElementById('stream-overlay-back');
+const streamOverlayTitle = document.getElementById('stream-overlay-title');
+const streamOverlayVideo = document.getElementById('stream-overlay-video');
+let openStreamOverlayUid = null;
+
+function openStreamOverlay(uid) {
+    const tile = getTile(uid);
+    if (!tile || !streamOverlay) return;
+    const tileVideo = tile.querySelector('video');
+    if (streamOverlayVideo) streamOverlayVideo.srcObject = tileVideo ? tileVideo.srcObject : null;
+    if (streamOverlayTitle) {
+        streamOverlayTitle.textContent = uid === 'local' ? 'Your screen' : `${tile.dataset.name || 'Anonymous'}'s screen`;
+    }
+    streamOverlay.classList.remove('hidden');
+    openStreamOverlayUid = uid;
+}
+
+function closeStreamOverlay() {
+    if (!streamOverlay) return;
+    streamOverlay.classList.add('hidden');
+    if (streamOverlayVideo) streamOverlayVideo.srcObject = null;
+    openStreamOverlayUid = null;
+}
+
+if (streamOverlayBack) streamOverlayBack.addEventListener('click', closeStreamOverlay);
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && openStreamOverlayUid) closeStreamOverlay();
+});
 
 // Some browsers block sound until the user clicks. If that happens we show a
 // button instead of leaving people in a silent call.
@@ -886,6 +915,16 @@ function setTileState(id, state) {
     if (!tile) return;
     tile.classList.toggle('mic-off', state.micOn === false);
     tile.classList.toggle('cam-off', state.camOn === false);
+
+    if (id !== 'local' && state.sharingScreen !== undefined) {
+        const presenting = state.sharingScreen === true;
+        tile.classList.toggle('screen-sharing', presenting);
+        const name = tile.dataset.name || 'Anonymous';
+        const label = presenting ? `View ${name}'s screen share` : `Voice settings for ${name}`;
+        tile.setAttribute('aria-label', label);
+        tile.title = presenting ? 'Click to view full screen' : 'Click for voice settings';
+        if (!presenting && openStreamOverlayUid === id) closeStreamOverlay();
+    }
 }
 
 function updateGrid() {
@@ -925,11 +964,13 @@ function buildTile(id, name, isLocal) {
     micIcon.className = 'fa-solid fa-microphone-slash mic-icon';
     const deafenIcon = document.createElement('i');
     deafenIcon.className = 'fa-solid fa-volume-xmark deafen-icon';
-    const presentingIcon = document.createElement('i');
-    presentingIcon.className = 'fa-solid fa-display presenting-icon';
     const nameEl = document.createElement('span');
     nameEl.textContent = isLocal ? 'You' : (name || 'Anonymous');
-    label.append(micIcon, deafenIcon, presentingIcon, nameEl);
+    label.append(micIcon, deafenIcon, nameEl);
+
+    const presentingBadge = document.createElement('div');
+    presentingBadge.className = 'tile-presenting-badge';
+    presentingBadge.innerHTML = '<i class="fa-solid fa-display"></i><span>Presenting</span>';
 
     if (!isLocal) {
         tile.tabIndex = 0;
@@ -937,19 +978,33 @@ function buildTile(id, name, isLocal) {
         tile.setAttribute('role', 'button');
         tile.setAttribute('aria-haspopup', 'menu');
         tile.setAttribute('aria-label', `Voice settings for ${name || 'Anonymous'}`);
-        tile.addEventListener('click', () => toggleTileMenu(id, tile));
+        tile.addEventListener('click', () => {
+            if (tile.classList.contains('screen-sharing')) {
+                openStreamOverlay(id);
+            } else {
+                toggleTileMenu(id, tile);
+            }
+        });
         tile.addEventListener('keydown', (event) => {
             if (event.key === 'Enter' || event.key === ' ') {
                 event.preventDefault();
-                toggleTileMenu(id, tile);
+                if (tile.classList.contains('screen-sharing')) {
+                    openStreamOverlay(id);
+                } else {
+                    toggleTileMenu(id, tile);
+                }
             }
+        });
+    } else {
+        tile.addEventListener('click', () => {
+            if (tile.classList.contains('screen-sharing')) openStreamOverlay(id);
         });
     }
 
     const status = document.createElement('div');
     status.className = 'tile-status';
 
-    tile.append(video, avatar, status, label);
+    tile.append(video, avatar, status, label, presentingBadge);
     videoGrid.appendChild(tile);
     updateGrid();
 
@@ -1296,7 +1351,7 @@ function updateControls() {
 
 function publishMediaState() {
     if (!myParticipantRef) return;
-    updateDoc(myParticipantRef, { micOn, camOn }).catch((err) => console.error('Error sharing mic/camera state:', err));
+    updateDoc(myParticipantRef, { micOn, camOn, sharingScreen: isScreenSharing }).catch((err) => console.error('Error sharing mic/camera state:', err));
 }
 
 function toggleMic() {
@@ -1351,6 +1406,7 @@ function setLocalTilePresenting(presenting, stream) {
     const tile = getTile('local');
     if (!tile) return;
     tile.classList.toggle('screen-sharing', presenting);
+    tile.title = presenting ? 'Click to view full screen' : '';
     const video = tile.querySelector('video');
     if (video) video.srcObject = presenting ? stream : localStream;
 }
@@ -1398,6 +1454,7 @@ async function toggleScreenShare() {
 
     screenShareBusy = false;
     updateControls();
+    publishMediaState();
 }
 
 async function stopScreenShare() {
@@ -1408,7 +1465,9 @@ async function stopScreenShare() {
     isScreenSharing = false;
     await setOutgoingVideo(null);
     setLocalTilePresenting(false, null);
+    if (openStreamOverlayUid === 'local') closeStreamOverlay();
     updateControls();
+    publishMediaState();
 }
 
 /* ------------------------------------------------------------------ */
@@ -1596,6 +1655,7 @@ async function startLocalMedia() {
 
 function removePeer(uid) {
     if (openMenuUid === uid) closeTileMenu();
+    if (openStreamOverlayUid === uid) closeStreamOverlay();
     stopWatchingSpeaking(uid);
     const audioEl = remoteAudio[uid];
     if (audioEl) {
@@ -1845,7 +1905,7 @@ function listenForParticipants(user, roomRef) {
                 return;
             }
 
-            remoteMedia[p.uid] = { micOn: p.micOn !== false, camOn: p.camOn !== false };
+            remoteMedia[p.uid] = { micOn: p.micOn !== false, camOn: p.camOn !== false, sharingScreen: p.sharingScreen === true };
             setTileState(p.uid, remoteMedia[p.uid]);
         });
     }));
@@ -1896,6 +1956,7 @@ async function joinGroupCall(roomId = CALL_ROOM_ID) {
             displayName: currentDisplayName,
             micOn,
             camOn,
+            sharingScreen: isScreenSharing,
             heartbeatMs: nowMs(),
             joinedAt: serverTimestamp()
         });
@@ -1924,7 +1985,7 @@ async function joinGroupCall(roomId = CALL_ROOM_ID) {
             const theyJoinedAfterMe = remoteJoined > myJoinedMs || (remoteJoined === myJoinedMs && remote.uid > user.uid);
             if (theyJoinedAfterMe) continue;
 
-            remoteMedia[remote.uid] = { micOn: remote.micOn !== false, camOn: remote.camOn !== false };
+            remoteMedia[remote.uid] = { micOn: remote.micOn !== false, camOn: remote.camOn !== false, sharingScreen: remote.sharingScreen === true };
             await callPeer(user, roomRef, remote);
         }
     } catch (err) {
@@ -1944,6 +2005,7 @@ async function hangUpGroupCall() {
     myCallDocRefs = [];
 
     closeTileMenu();
+    closeStreamOverlay();
     stopAllSpeaking();
     if (audioUnlock) audioUnlock.classList.add('hidden');
 

@@ -92,6 +92,19 @@
 
             <div id="video-grid" class="video-grid" data-count="1"></div>
 
+            <div id="stream-overlay" class="stream-overlay hidden" role="dialog" aria-modal="true" aria-label="Full screen stream">
+                <div class="stream-overlay-header">
+                    <button id="stream-overlay-back" class="stream-overlay-back" type="button">
+                        <i class="fa-solid fa-arrow-left"></i>
+                        <span>Back</span>
+                    </button>
+                    <span id="stream-overlay-title" class="stream-overlay-title"></span>
+                </div>
+                <div class="stream-overlay-body">
+                    <video id="stream-overlay-video" autoplay playsinline muted></video>
+                </div>
+            </div>
+
             <footer class="call-controls">
                 <button id="mic-button" class="call-btn" type="button" aria-label="Mute microphone" aria-pressed="false">
                     <i class="fa-solid fa-microphone"></i>
