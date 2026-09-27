@@ -4,7 +4,7 @@ import {
     getFirestore, doc, getDoc, setDoc, collection, addDoc, query, where, orderBy, limit,
     startAfter, onSnapshot, serverTimestamp, getDocs, deleteDoc, updateDoc
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
-import { loadAccount, updateAccount } from "./account-store.js";
+import { loadAccount, updateAccount } from "../account-store.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyCLKCCpNbCs2AJm7g0JtGIjL43X5hr31N8",
