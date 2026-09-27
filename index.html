@@ -4,15 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Aurora</title>
-    <script>
-        const t = localStorage.getItem('aurora_theme');
-        if (t) document.documentElement.setAttribute('data-theme', t);
-    </script>
 </head>
 <body>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
+        import { getFirestore } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+        import { loadAccount, resolveUidBySequentialId } from "./account-store.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyCLKCCpNbCs2AJm7g0JtGIjL43X5hr31N8",
@@ -26,6 +24,17 @@
 
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
 
         onAuthStateChanged(auth, (user) => {
             if (!user) {
@@ -43,8 +52,7 @@
 
                 const match = customPath.match(/^\/users\/([^\/]+)\/profile$/);
                 if (match) {
-                    const userId = match[1];
-                    loadProfileView(userId);
+                    loadProfileView(match[1]);
                     return;
                 }
             }
@@ -52,12 +60,42 @@
             window.location.href = '/aurora/general/';
         });
 
-        function loadProfileView(userId) {
+        async function loadProfileView(sequentialId) {
+            renderProfileShell(sequentialId, 'Loading profile…');
+
+            const uid = await resolveUidBySequentialId(db, sequentialId);
+            if (!uid) {
+                renderProfileShell(sequentialId, 'This profile could not be found.');
+                return;
+            }
+
+            const { data } = await loadAccount(db, uid, {
+                onFresh: (fresh) => renderProfileDetails(sequentialId, fresh)
+            });
+
+            if (data) {
+                renderProfileDetails(sequentialId, data);
+            } else {
+                renderProfileShell(sequentialId, 'This profile could not be found.');
+            }
+        }
+
+        function renderProfileShell(sequentialId, statusText) {
             document.body.innerHTML = `
-                <div style="background:var(--bg, #17171c); color:var(--text, #fff); padding:40px; font-family:sans-serif;">
-                    <h2>User Profile: ${userId}</h2>
-                    <p>Loading profile data from Firestore...</p>
-                    <a href="/aurora/general/" style="color:var(--text, #fff);">Back to General Chat</a>
+                <div style="background:#17171c; color:#fff; padding:40px; font-family:sans-serif;">
+                    <h2>User Profile: ${escapeHtml(sequentialId)}</h2>
+                    <p id="profile-status">${escapeHtml(statusText)}</p>
+                    <a href="/aurora/general/" style="color:#fff;">Back to General Chat</a>
+                </div>
+            `;
+        }
+
+        function renderProfileDetails(sequentialId, userData) {
+            document.body.innerHTML = `
+                <div style="background:#17171c; color:#fff; padding:40px; font-family:sans-serif;">
+                    <h2>User Profile: ${escapeHtml(sequentialId)}</h2>
+                    <p>Display name: ${escapeHtml(userData.displayName || 'Anonymous')}</p>
+                    <a href="/aurora/general/" style="color:#fff;">Back to General Chat</a>
                 </div>
             `;
         }
