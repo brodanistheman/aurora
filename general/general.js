@@ -1,7 +1,10 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, collection, addDoc, query, where, orderBy, limit, onSnapshot, serverTimestamp, getDocs, deleteDoc, updateDoc, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
-import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-storage.js";
+import {
+    getFirestore, doc, getDoc, setDoc, collection, addDoc, query, where, orderBy, limit,
+    startAfter, onSnapshot, serverTimestamp, getDocs, deleteDoc, updateDoc
+} from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+import { loadAccount, updateAccount } from "./account-store.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyCLKCCpNbCs2AJm7g0JtGIjL43X5hr31N8",
@@ -23,6 +26,8 @@ const MODERATOR_UIDS = [
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 4 * 1024 * 1024;
 const SCROLL_NEAR_BOTTOM_PX = 80;
+const SCROLL_NEAR_TOP_PX = 60;
+const MESSAGE_PAGE_SIZE = 30;
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -48,10 +53,6 @@ const defaultAvatar = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/200
 let currentDisplayName = 'Anonymous';
 let currentProfilePic = '';
 let presenceInterval = null;
-
-// People's computers often have clocks that are off by minutes. Call "freshness"
-// checks compare timestamps written by different computers, so we estimate how far
-// our clock is from the server's and correct for it.
 let serverOffsetMs = 0;
 
 function nowMs() {
@@ -117,13 +118,6 @@ function applyUserData(userData) {
             window.location.href = `/aurora/users/${encodeURIComponent(userData.sequentialId)}/profile/`;
         };
     }
-}
-
-const cachedSequentialId = localStorage.getItem('aurora_quick_id');
-if (cachedSequentialId && profileButton) {
-    profileButton.onclick = () => {
-        window.location.href = `/aurora/users/${encodeURIComponent(cachedSequentialId)}/profile/`;
-    };
 }
 
 function setupPresence(user) {
@@ -223,165 +217,6 @@ function isScrolledNearBottom(el) {
     return el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_NEAR_BOTTOM_PX;
 }
 
-/* ------------------------------------------------------------------ */
-/* Reply feature                                                       */
-/* ------------------------------------------------------------------ */
-
-let replyTarget = null;
-
-const replyBanner = document.getElementById('reply-banner');
-const replyBannerName = document.getElementById('reply-banner-name');
-const replyBannerSnippet = document.getElementById('reply-banner-snippet');
-const replyCancelButton = document.getElementById('reply-cancel');
-
-function makeSnippet(msg) {
-    const text = (msg.text || '').trim();
-    if (text) return text.length > 80 ? `${text.slice(0, 80)}…` : text;
-    if (msg.imageUrl) return 'Image';
-    if (msg.videoUrl) return 'Video';
-    return '';
-}
-
-function setReplyTarget(msg) {
-    replyTarget = {
-        id: msg.id,
-        displayName: msg.displayName || 'Anonymous',
-        snippet: makeSnippet(msg)
-    };
-    if (replyBannerName) replyBannerName.textContent = replyTarget.displayName;
-    if (replyBannerSnippet) replyBannerSnippet.textContent = replyTarget.snippet;
-    if (replyBanner) replyBanner.classList.remove('hidden');
-    if (messageInput) messageInput.focus();
-}
-
-function clearReply() {
-    replyTarget = null;
-    if (replyBanner) replyBanner.classList.add('hidden');
-}
-
-function jumpToMessage(id) {
-    if (!messageBox) return;
-    const target = messageBox.querySelector(`[data-message-id="${CSS.escape(id)}"]`);
-    if (!target) return;
-    target.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    target.classList.add('is-highlighted');
-    setTimeout(() => target.classList.remove('is-highlighted'), 1500);
-}
-
-if (replyCancelButton) replyCancelButton.addEventListener('click', clearReply);
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && replyTarget && document.activeElement === messageInput) clearReply();
-});
-
-/* ------------------------------------------------------------------ */
-/* Message actions: reactions, edit, delete                            */
-/* ------------------------------------------------------------------ */
-
-const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
-let reactionPickerEl = null;
-let reactionPickerMessageId = null;
-
-function closeReactionPicker() {
-    if (reactionPickerEl) {
-        reactionPickerEl.remove();
-        reactionPickerEl = null;
-    }
-    reactionPickerMessageId = null;
-}
-
-function openReactionPicker(messageId, anchorBtn) {
-    if (reactionPickerMessageId === messageId) {
-        closeReactionPicker();
-        return;
-    }
-    closeReactionPicker();
-
-    const picker = document.createElement('div');
-    picker.className = 'reaction-picker';
-    picker.setAttribute('role', 'menu');
-    picker.setAttribute('aria-label', 'Add a reaction');
-
-    REACTION_EMOJIS.forEach((emoji) => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'reaction-picker-option';
-        btn.textContent = emoji;
-        btn.setAttribute('aria-label', `React with ${emoji}`);
-        btn.addEventListener('click', () => {
-            toggleReaction(messageId, emoji);
-            closeReactionPicker();
-        });
-        picker.appendChild(btn);
-    });
-
-    document.body.appendChild(picker);
-
-    const rect = anchorBtn.getBoundingClientRect();
-    const pickerRect = picker.getBoundingClientRect();
-    let left = rect.left + rect.width / 2 - pickerRect.width / 2;
-    left = Math.max(8, Math.min(left, window.innerWidth - pickerRect.width - 8));
-    let top = rect.top - pickerRect.height - 8;
-    if (top < 8) top = rect.bottom + 8;
-    picker.style.left = `${left}px`;
-    picker.style.top = `${top}px`;
-
-    reactionPickerEl = picker;
-    reactionPickerMessageId = messageId;
-}
-
-document.addEventListener('mousedown', (event) => {
-    if (!reactionPickerEl || reactionPickerEl.contains(event.target)) return;
-    if (event.target.closest && event.target.closest('.chat-react-btn')) return;
-    closeReactionPicker();
-});
-document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && reactionPickerEl) closeReactionPicker();
-});
-window.addEventListener('resize', closeReactionPicker);
-
-async function toggleReaction(messageId, emoji) {
-    const user = auth.currentUser;
-    if (!user) return;
-
-    const msgRef = doc(db, 'messages', messageId);
-    try {
-        const snap = await getDoc(msgRef);
-        if (!snap.exists()) return;
-        const reactions = snap.data().reactions || {};
-        const already = (reactions[emoji] || []).includes(user.uid);
-        await updateDoc(msgRef, {
-            [`reactions.${emoji}`]: already ? arrayRemove(user.uid) : arrayUnion(user.uid)
-        });
-    } catch (err) {
-        console.error('Error toggling reaction:', err);
-    }
-}
-
-function renderReactionsHtml(msg) {
-    const reactions = msg.reactions || {};
-    const myUid = auth.currentUser ? auth.currentUser.uid : null;
-    const entries = Object.entries(reactions).filter(([, uids]) => Array.isArray(uids) && uids.length > 0);
-    if (!entries.length) return '';
-
-    const pills = entries.map(([emoji, uids]) => {
-        const mine = myUid && uids.includes(myUid);
-        const safeEmoji = escapeHtml(emoji);
-        return `<button type="button" class="reaction-pill${mine ? ' mine' : ''}" data-emoji="${safeEmoji}" title="${uids.length} reacted">${safeEmoji} <span>${uids.length}</span></button>`;
-    }).join('');
-
-    return `<div class="chat-reactions">${pills}</div>`;
-}
-
-async function deleteOwnMessage(messageId) {
-    if (!confirm('Delete this message? This cannot be undone.')) return;
-    try {
-        await deleteDoc(doc(db, 'messages', messageId));
-    } catch (err) {
-        console.error('Error deleting message:', err);
-        alert('Could not delete the message. Please try again.');
-    }
-}
-
 function enterEditMode(div, msg) {
     const body = div.querySelector('.chat-message-body');
     if (!body || body.querySelector('.chat-edit-form')) return;
@@ -420,137 +255,200 @@ function enterEditMode(div, msg) {
     input.setSelectionRange(input.value.length, input.value.length);
 }
 
-/* ------------------------------------------------------------------ */
-/* Chat                                                                */
-/* ------------------------------------------------------------------ */
+const messageElements = new Map();
+let oldestMessageDoc = null;
+let paginationStarted = false;
+let hasMoreOlderMessages = true;
+let loadingOlderMessages = false;
+const paginatedMessageIds = new Set();
 
-function initChat() {
-    const q = query(collection(db, "messages"), orderBy("createdAt", "desc"), limit(30));
+function messageTimestampMs(msg) {
+    return msg.createdAt && msg.createdAt.toMillis ? msg.createdAt.toMillis() : Date.now();
+}
 
-    onSnapshot(q, (snapshot) => {
-        if (!messageBox) return;
+function buildMessageNode(msg, ms) {
+    const senderDisplay = escapeHtml(msg.displayName || 'Anonymous');
 
-        const shouldStickToBottom = isScrolledNearBottom(messageBox);
-        messageBox.innerHTML = '';
+    if (msg.type === 'call') {
+        const row = document.createElement('div');
+        row.className = 'chat-event';
+        row.dataset.messageId = msg.id;
+        row.dataset.ts = String(ms);
+        row.innerHTML = `
+            <div class="call-card">
+                <div class="call-card-icon"><i class="fa-solid fa-video"></i></div>
+                <div class="call-card-info">
+                    <span class="call-card-title">${senderDisplay} started a group call</span>
+                    <span class="call-card-sub"></span>
+                </div>
+                <button type="button" class="call-card-join">Join</button>
+            </div>
+        `;
+        row.querySelector('.call-card-join').addEventListener('click', () => {
+            joinGroupCall(msg.roomId || CALL_ROOM_ID);
+        });
+        return row;
+    }
 
-        const docsToRender = [];
-        snapshot.forEach((d) => docsToRender.push({ id: d.id, ...d.data() }));
+    const div = document.createElement('div');
+    div.className = 'chat-message';
+    div.dataset.messageId = msg.id;
+    div.dataset.ts = String(ms);
 
-        if (docsToRender.length === 0) {
-            messageBox.innerHTML = `<p class="empty-state">No messages yet. Say hello!</p>`;
+    const senderPic = isSafeImageSrc(msg.profilePic) ? msg.profilePic : defaultAvatar;
+    const isOwn = !!(auth.currentUser && msg.uid === auth.currentUser.uid);
+
+    let contentHtml = '';
+    if (msg.text) {
+        contentHtml += `<span class="chat-message-text">${formatMessageText(msg.text)}</span>`;
+        if (msg.edited) contentHtml += `<span class="edited-tag"> (edited)</span>`;
+    }
+    if (msg.imageUrl && isSafeImageSrc(msg.imageUrl)) {
+        contentHtml += `<div style="margin-top: 6px;"><img src="${msg.imageUrl}" class="chat-message-image clickable-image" alt="Attached image" /></div>`;
+    }
+    if (msg.videoUrl && isSafeVideoSrc(msg.videoUrl)) {
+        contentHtml += `<div style="margin-top: 6px;"><video src="${msg.videoUrl}" class="chat-message-video" controls preload="metadata"></video></div>`;
+    }
+
+    const editBtnHtml = (isOwn && msg.text)
+        ? `<button type="button" class="chat-edit-btn" title="Edit" aria-label="Edit message"><i class="fa-solid fa-pen"></i></button>`
+        : '';
+
+    div.innerHTML = `
+        <img src="${senderPic}" alt="" class="chat-profile-pic" onerror="this.src='${defaultAvatar}'">
+        <div class="chat-message-content">
+            <div class="chat-message-header">
+                <span class="chat-sender-name">${senderDisplay}</span>
+                <div class="chat-message-actions">
+                    ${editBtnHtml}
+                </div>
+            </div>
+            <div class="chat-message-body">${contentHtml}</div>
+        </div>
+    `;
+
+    const editBtn = div.querySelector('.chat-edit-btn');
+    if (editBtn) editBtn.addEventListener('click', () => enterEditMode(div, msg));
+
+    const image = div.querySelector('.clickable-image');
+    if (image) image.addEventListener('click', () => openLightbox(image.src));
+
+    return div;
+}
+
+function insertMessageNode(node, ms) {
+    const nodes = messageBox.querySelectorAll('[data-message-id]');
+    for (const existing of nodes) {
+        if (ms < Number(existing.dataset.ts || 0)) {
+            messageBox.insertBefore(node, existing);
+            return;
+        }
+    }
+    messageBox.appendChild(node);
+}
+
+function upsertMessageElement(msg) {
+    const ms = messageTimestampMs(msg);
+    const existing = messageElements.get(msg.id);
+    if (existing) {
+        const rebuilt = buildMessageNode(msg, ms);
+        existing.replaceWith(rebuilt);
+        messageElements.set(msg.id, rebuilt);
+        return;
+    }
+    const node = buildMessageNode(msg, ms);
+    messageElements.set(msg.id, node);
+    insertMessageNode(node, ms);
+}
+
+function removeMessageElement(id) {
+    if (paginatedMessageIds.has(id)) return;
+    const node = messageElements.get(id);
+    if (node) node.remove();
+    messageElements.delete(id);
+}
+
+function refreshEmptyState() {
+    const emptyState = messageBox.querySelector('.empty-state');
+    if (messageElements.size === 0) {
+        if (!emptyState) messageBox.innerHTML = '<p class="empty-state">No messages yet. Say hello!</p>';
+    } else if (emptyState) {
+        emptyState.remove();
+    }
+}
+
+async function loadOlderMessages() {
+    if (loadingOlderMessages || !hasMoreOlderMessages || !oldestMessageDoc) return;
+    loadingOlderMessages = true;
+    paginationStarted = true;
+
+    try {
+        const q = query(
+            collection(db, 'messages'),
+            orderBy('createdAt', 'desc'),
+            startAfter(oldestMessageDoc),
+            limit(MESSAGE_PAGE_SIZE)
+        );
+        const snap = await getDocs(q);
+
+        if (snap.empty) {
+            hasMoreOlderMessages = false;
             return;
         }
 
-        docsToRender.reverse().forEach((msg) => {
-            const senderDisplay = escapeHtml(msg.displayName || 'Anonymous');
+        oldestMessageDoc = snap.docs[snap.docs.length - 1];
+        const previousHeight = messageBox.scrollHeight;
 
-            if (msg.type === 'call') {
-                const row = document.createElement('div');
-                row.className = 'chat-event';
-                row.innerHTML = `
-                    <div class="call-card">
-                        <div class="call-card-icon"><i class="fa-solid fa-video"></i></div>
-                        <div class="call-card-info">
-                            <span class="call-card-title">${senderDisplay} started a group call</span>
-                            <span class="call-card-sub"></span>
-                        </div>
-                        <button type="button" class="call-card-join">Join</button>
-                    </div>
-                `;
-                row.querySelector('.call-card-join').addEventListener('click', () => {
-                    joinGroupCall(msg.roomId || CALL_ROOM_ID);
-                });
-                messageBox.appendChild(row);
-                return;
-            }
-
-            const div = document.createElement('div');
-            div.className = 'chat-message';
-            div.dataset.messageId = msg.id;
-
-            const senderPic = isSafeImageSrc(msg.profilePic) ? msg.profilePic : defaultAvatar;
-
-            const isOwn = !!(auth.currentUser && msg.uid === auth.currentUser.uid);
-
-            let contentHtml = '';
-            if (msg.text) {
-                contentHtml += `<span class="chat-message-text">${formatMessageText(msg.text)}</span>`;
-                if (msg.edited) contentHtml += `<span class="edited-tag"> (edited)</span>`;
-            }
-            if (msg.imageUrl && isSafeImageSrc(msg.imageUrl)) {
-                contentHtml += `<div style="margin-top: 6px;"><img src="${msg.imageUrl}" class="chat-message-image clickable-image" alt="Attached image" /></div>`;
-            }
-            if (msg.videoUrl && isSafeVideoSrc(msg.videoUrl)) {
-                contentHtml += `<div style="margin-top: 6px;"><video src="${msg.videoUrl}" class="chat-message-video" controls preload="metadata"></video></div>`;
-            }
-
-            let quoteHtml = '';
-            if (msg.replyTo && msg.replyTo.id) {
-                quoteHtml = `
-                    <button type="button" class="chat-reply-quote">
-                        <strong>${escapeHtml(msg.replyTo.displayName || 'Anonymous')}</strong>
-                        <span>${escapeHtml(msg.replyTo.snippet || 'Original message')}</span>
-                    </button>`;
-            }
-
-            const editBtnHtml = (isOwn && msg.text)
-                ? `<button type="button" class="chat-edit-btn" title="Edit" aria-label="Edit message"><i class="fa-solid fa-pen"></i></button>`
-                : '';
-            const deleteBtnHtml = isOwn
-                ? `<button type="button" class="chat-delete-btn" title="Delete" aria-label="Delete message"><i class="fa-solid fa-trash"></i></button>`
-                : '';
-
-            div.innerHTML = `
-                <img src="${senderPic}" alt="" class="chat-profile-pic" onerror="this.src='${defaultAvatar}'">
-                <div class="chat-message-content">
-                    ${quoteHtml}
-                    <div class="chat-message-header">
-                        <span class="chat-sender-name">${senderDisplay}</span>
-                        <div class="chat-message-actions">
-                            ${editBtnHtml}
-                            ${deleteBtnHtml}
-                            <button type="button" class="chat-react-btn" title="Add reaction" aria-label="Add reaction to message from ${senderDisplay}">
-                                <i class="fa-regular fa-face-smile"></i>
-                            </button>
-                            <button type="button" class="chat-reply-btn" title="Reply" aria-label="Reply to ${senderDisplay}">
-                                <i class="fa-solid fa-reply"></i>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="chat-message-body">${contentHtml}</div>
-                    ${renderReactionsHtml(msg)}
-                </div>
-            `;
-
-            div.querySelector('.chat-reply-btn').addEventListener('click', () => setReplyTarget(msg));
-            div.querySelector('.chat-react-btn').addEventListener('click', (event) => openReactionPicker(msg.id, event.currentTarget));
-
-            const editBtn = div.querySelector('.chat-edit-btn');
-            if (editBtn) editBtn.addEventListener('click', () => enterEditMode(div, msg));
-
-            const deleteBtn = div.querySelector('.chat-delete-btn');
-            if (deleteBtn) deleteBtn.addEventListener('click', () => deleteOwnMessage(msg.id));
-
-            div.querySelectorAll('.reaction-pill').forEach((pill) => {
-                pill.addEventListener('click', () => toggleReaction(msg.id, pill.dataset.emoji));
-            });
-
-            const quote = div.querySelector('.chat-reply-quote');
-            if (quote) quote.addEventListener('click', () => jumpToMessage(msg.replyTo.id));
-
-            messageBox.appendChild(div);
+        [...snap.docs].reverse().forEach((docSnap) => {
+            const msg = { id: docSnap.id, ...docSnap.data() };
+            if (messageElements.has(msg.id)) return;
+            paginatedMessageIds.add(msg.id);
+            const ms = messageTimestampMs(msg);
+            const node = buildMessageNode(msg, ms);
+            messageElements.set(msg.id, node);
+            messageBox.insertBefore(node, messageBox.firstChild);
         });
 
-        messageBox.querySelectorAll('.clickable-image').forEach((img) => {
-            img.addEventListener('click', () => openLightbox(img.src));
+        messageBox.scrollTop += messageBox.scrollHeight - previousHeight;
+    } catch (err) {
+        console.error('Error loading older messages:', err);
+    } finally {
+        loadingOlderMessages = false;
+    }
+}
+
+function handleScrollForOlderMessages() {
+    if (messageBox.scrollTop < SCROLL_NEAR_TOP_PX) loadOlderMessages();
+}
+
+function initChat() {
+    if (!messageBox) return;
+
+    const q = query(collection(db, 'messages'), orderBy('createdAt', 'desc'), limit(MESSAGE_PAGE_SIZE));
+
+    onSnapshot(q, (snapshot) => {
+        if (!paginationStarted) {
+            oldestMessageDoc = snapshot.docs[snapshot.docs.length - 1] || oldestMessageDoc;
+        }
+
+        const shouldStick = isScrolledNearBottom(messageBox);
+
+        snapshot.docChanges().forEach((change) => {
+            const msg = { id: change.doc.id, ...change.doc.data() };
+            if (change.type === 'removed') {
+                removeMessageElement(msg.id);
+            } else {
+                upsertMessageElement(msg);
+            }
         });
 
+        refreshEmptyState();
         renderCallPresence();
 
-        if (shouldStickToBottom) {
-            messageBox.scrollTop = messageBox.scrollHeight;
-        }
+        if (shouldStick) messageBox.scrollTop = messageBox.scrollHeight;
     });
+
+    messageBox.addEventListener('scroll', handleScrollForOlderMessages);
 }
 
 async function clearAllMessages() {
@@ -594,11 +492,9 @@ async function sendChatMessage(text, attachment = null) {
             text: text || '',
             imageUrl: attachment && attachment.type === 'image' ? attachment.url : null,
             videoUrl: attachment && attachment.type === 'video' ? attachment.url : null,
-            replyTo: replyTarget ? { ...replyTarget } : null,
             createdAt: serverTimestamp()
         });
         messageInput.value = '';
-        clearReply();
         if (imageInput) imageInput.value = '';
     } catch (error) {
         console.error("Error sending message: ", error);
@@ -681,31 +577,11 @@ if (messageForm) {
     }
 }
 
-/* ------------------------------------------------------------------ */
-/* Group call                                                          */
-/* ------------------------------------------------------------------ */
-
 const CALL_ROOM_ID = 'main-room';
 const HEARTBEAT_MS = 20000;
 const STALE_AFTER_MS = 75000;
 
-// TURN relays audio/video for people whose network blocks direct connections
-// (school/work Wi-Fi, mobile data, strict routers). Without it, those people
-// connect to the call but can't hear or see anyone.
-//
-// Sign up for a TURN provider (e.g. metered.ca has a free plan), generate
-// credentials, and paste the entries they give you here. Use the exact hostnames
-// and ports shown in your provider's dashboard.
-const TURN_SERVERS = [
-    // { urls: 'turn:standard.relay.metered.ca:80', username: 'YOUR_USERNAME', credential: 'YOUR_CREDENTIAL' },
-    // { urls: 'turn:standard.relay.metered.ca:80?transport=tcp', username: 'YOUR_USERNAME', credential: 'YOUR_CREDENTIAL' },
-    // { urls: 'turn:standard.relay.metered.ca:443', username: 'YOUR_USERNAME', credential: 'YOUR_CREDENTIAL' },
-    // { urls: 'turns:standard.relay.metered.ca:443?transport=tcp', username: 'YOUR_USERNAME', credential: 'YOUR_CREDENTIAL' },
-];
-
-if (!TURN_SERVERS.length) {
-    console.warn('[call] No TURN server configured. People on strict networks will not be able to connect.');
-}
+const TURN_SERVERS = [];
 
 const servers = {
     iceServers: [
@@ -790,8 +666,6 @@ document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && openStreamOverlayUid) closeStreamOverlay();
 });
 
-// Some browsers block sound until the user clicks. If that happens we show a
-// button instead of leaving people in a silent call.
 function showAudioBlocked() {
     if (audioUnlock) audioUnlock.classList.remove('hidden');
 }
@@ -948,7 +822,7 @@ function buildTile(id, name, isLocal) {
     const video = document.createElement('video');
     video.autoplay = true;
     video.playsInline = true;
-    video.muted = true; // remote sound plays through a separate <audio> element
+    video.muted = true;
 
     const avatar = document.createElement('div');
     avatar.className = 'tile-avatar';
@@ -1364,9 +1238,6 @@ function toggleMic() {
     publishMediaState();
 }
 
-/* Camera is off by default. It is only requested when the user turns it on,
-   and released completely (camera light off) when they turn it off. */
-
 async function setOutgoingVideo(track) {
     await Promise.all(Object.values(peerConnections).map(async (pc) => {
         const transceiver = pc.getTransceivers().find(
@@ -1394,13 +1265,6 @@ async function setOutgoingAudio(track) {
         }
     }));
 }
-
-/* ------------------------------------------------------------------ */
-/* Screen sharing ("streaming")                                        */
-/*                                                                      */
-/* Screen share and the camera both use the single video slot reserved */
-/* on each peer connection, so turning one on turns the other off.     */
-/* ------------------------------------------------------------------ */
 
 function setLocalTilePresenting(presenting, stream) {
     const tile = getTile('local');
@@ -1469,16 +1333,6 @@ async function stopScreenShare() {
     updateControls();
     publishMediaState();
 }
-
-/* ------------------------------------------------------------------ */
-/* Device audio sharing                                                */
-/*                                                                      */
-/* Browsers only expose system/tab audio capture through the screen-   */
-/* share picker, so we ask for a screen source but immediately discard */
-/* the video track, keeping just the audio. It's mixed with the mic    */
-/* (via Web Audio) into one outgoing track so peers hear both. Nothing */
-/* is played locally — the person already hears their own audio.       */
-/* ------------------------------------------------------------------ */
 
 async function toggleDeviceAudioShare() {
     if (!localStream || audioShareBusy) return;
@@ -1685,23 +1539,14 @@ function createPeer(remoteUid, remoteName, isCaller = false, onFailed = null) {
     const pc = new RTCPeerConnection(servers);
     peerConnections[remoteUid] = pc;
 
-    // Video and audio are added explicitly (rather than looping over
-    // localStream's tracks) so a peer who joins mid-share picks up whatever
-    // is currently going out — the screen instead of the camera, or the
-    // mixed mic+device-audio track instead of the raw mic.
     const outgoingVideoTrack = isScreenSharing && screenStream ? screenStream.getVideoTracks()[0] : localStream.getVideoTracks()[0];
     if (outgoingVideoTrack) {
         pc.addTrack(outgoingVideoTrack, localStream);
     } else if (isCaller) {
-        // Reserve a video slot in the offer so the camera or a screen share
-        // can be attached later with replaceTrack() and no renegotiation.
         pc.addTransceiver('video', { direction: 'sendrecv' });
     }
     pc.addTrack(currentAudioTrack || localStream.getAudioTracks()[0], localStream);
 
-    // Picture and sound are played separately. The tile's <video> only shows
-    // the picture (always muted); sound comes from a dedicated <audio> element,
-    // so hearing someone never depends on their camera sending frames.
     const remoteVideoStream = new MediaStream();
     ensureRemoteTile(remoteUid, remoteName).srcObject = remoteVideoStream;
     setTileConnection(remoteUid, 'connecting');
@@ -1799,7 +1644,6 @@ function listenForCandidates(pc, candidatesCol) {
 
 async function callPeer(user, roomRef, remote, attempt = 0) {
     const pc = createPeer(remote.uid, remote.displayName, true, () => {
-        // Connection failed: try again with a new offer, a couple of times.
         if (!inCall || attempt >= MAX_CALL_RETRIES) return;
         setTimeout(() => {
             if (inCall && peerConnections[remote.uid] === pc) {
@@ -1860,8 +1704,6 @@ async function answerCall(callRef, data) {
 
     await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
 
-    // The video slot created from the caller's offer is receive-only by default.
-    // Make it send/receive so our camera can be attached later without renegotiating.
     pc.getTransceivers().forEach((t) => {
         if (t.receiver.track && t.receiver.track.kind === 'video' && t.direction === 'recvonly') {
             t.direction = 'sendrecv';
@@ -2075,52 +1917,45 @@ window.addEventListener('beforeunload', () => {
     if (myParticipantRef) deleteDoc(myParticipantRef);
 });
 
-/* ------------------------------------------------------------------ */
-/* Auth                                                                */
-/* ------------------------------------------------------------------ */
-
 onAuthStateChanged(auth, async (user) => {
-    if (user) {
-        const cacheKey = `aurora_user_cache_${user.uid}`;
-        const cachedData = localStorage.getItem(cacheKey);
-
-        if (cachedData) {
-            try {
-                const parsed = JSON.parse(cachedData);
-                applyUserData(parsed);
-                localStorage.setItem('aurora_quick_id', parsed.sequentialId);
-            } catch {
-                localStorage.removeItem(cacheKey);
-            }
-        }
-
-        try {
-            const userRef = doc(db, "users", user.uid);
-            const userSnapshot = await getDoc(userRef);
-
-            if (userSnapshot.exists()) {
-                const userData = userSnapshot.data();
-                localStorage.setItem(cacheKey, JSON.stringify(userData));
-                localStorage.setItem('aurora_quick_id', userData.sequentialId);
-                applyUserData(userData);
-            } else if (!cachedData && userInfoElement) {
-                userInfoElement.textContent = "User profile not found.";
-            }
-        } catch (error) {
-            if (!cachedData && userInfoElement) {
-                userInfoElement.textContent = "Failed to load user data.";
-            }
-        }
-
-        setupPresence(user);
-        initOnlineUsersList();
-        initChat();
-        watchCallRoom();
-    } else {
-        localStorage.removeItem('aurora_quick_id');
+    if (!user) {
         window.location.href = '../';
+        return;
     }
+
+    const cached = getInitialCachedAccount(user.uid);
+    if (cached) applyUserData(cached);
+
+    try {
+        const { data } = await loadAccount(db, user.uid, {
+            onFresh: (fresh) => applyUserData(fresh)
+        });
+        if (data) {
+            applyUserData(data);
+        } else if (!cached && userInfoElement) {
+            userInfoElement.textContent = "User profile not found.";
+        }
+    } catch (error) {
+        if (!cached && userInfoElement) {
+            userInfoElement.textContent = "Failed to load user data.";
+        }
+    }
+
+    setupPresence(user);
+    initOnlineUsersList();
+    initChat();
+    watchCallRoom();
 });
+
+function getInitialCachedAccount(uid) {
+    try {
+        const raw = localStorage.getItem(`aurora_account_${uid}`);
+        if (!raw) return null;
+        return JSON.parse(raw).data;
+    } catch {
+        return null;
+    }
+}
 
 if (logoutButton) {
     logoutButton.addEventListener('click', async () => {

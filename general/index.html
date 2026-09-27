@@ -7,10 +7,6 @@
     <title>Aurora</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../style.css">
-    <script>
-        const t = localStorage.getItem('aurora_theme');
-        if (t) document.documentElement.setAttribute('data-theme', t);
-    </script>
 </head>
 <body>
     <div class="dashboard-layout">
@@ -42,14 +38,6 @@
 
         <div class="chat-panel">
             <div id="message-box" role="log" aria-live="polite" aria-label="Chat messages"></div>
-
-            <div id="reply-banner" class="reply-banner hidden">
-                <div class="reply-banner-text">
-                    <span class="reply-banner-label">Replying to <strong id="reply-banner-name"></strong></span>
-                    <span id="reply-banner-snippet"></span>
-                </div>
-                <button id="reply-cancel" class="reply-banner-close" type="button" aria-label="Cancel reply">&times;</button>
-            </div>
 
             <form id="message-form" class="chat-input-group">
                 <button id="attach-button" type="button" class="attach-button" aria-label="Attach image or video">
