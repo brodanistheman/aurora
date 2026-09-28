@@ -5,10 +5,6 @@ import {
     startAfter, onSnapshot, serverTimestamp, getDocs, deleteDoc, updateDoc
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 import { loadAccount, updateAccount } from "../account-store.js";
-import {
-    handleSpotifyCallback, setupSpotifyButton, startNowPlayingSync,
-    isSpotifyLinked, showSpotifyPopover
-} from "./spotify.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyCLKCCpNbCs2AJm7g0JtGIjL43X5hr31N8",
@@ -266,14 +262,6 @@ let hasMoreOlderMessages = true;
 let loadingOlderMessages = false;
 const paginatedMessageIds = new Set();
 
-// Click a profile picture in chat -> show what that user is playing on Spotify
-if (messageBox) {
-    messageBox.addEventListener('click', (e) => {
-        const pic = e.target.closest('.chat-profile-pic');
-        if (pic) showSpotifyPopover(db, pic.dataset.uid, pic);
-    });
-}
-
 function messageTimestampMs(msg) {
     return msg.createdAt && msg.createdAt.toMillis ? msg.createdAt.toMillis() : Date.now();
 }
@@ -327,7 +315,7 @@ function buildMessageNode(msg, ms) {
         : '';
 
     div.innerHTML = `
-        <img src="${senderPic}" alt="" class="chat-profile-pic" data-uid="${escapeHtml(msg.uid)}" onerror="this.src='${defaultAvatar}'">
+        <img src="${senderPic}" alt="" class="chat-profile-pic" onerror="this.src='${defaultAvatar}'">
         <div class="chat-message-content">
             <div class="chat-message-header">
                 <span class="chat-sender-name">${senderDisplay}</span>
@@ -1954,12 +1942,6 @@ onAuthStateChanged(auth, async (user) => {
     }
 
     setupPresence(user);
-
-    // Spotify: finish OAuth redirect (if any), wire up the button, start syncing
-    await handleSpotifyCallback();
-    setupSpotifyButton(document.getElementById('spotify-button'), db, user.uid);
-    if (isSpotifyLinked()) startNowPlayingSync(db, user.uid);
-
     initOnlineUsersList();
     initChat();
     watchCallRoom();
