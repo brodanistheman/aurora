@@ -2,123 +2,118 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Aurora chat dashboard">
-    <meta name="color-scheme" content="dark">
-    <meta name="theme-color" content="#000000">
     <title>Aurora</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../style.css">
 </head>
 <body>
-    <div class="app" id="app">
-        <div id="sidebar-backdrop" class="sidebar-backdrop"></div>
-
-        <aside id="sidebar" class="sidebar" aria-label="Sidebar">
-            <div class="sidebar-header">
-                <h1 class="brand">Aurora</h1>
+    <div class="dashboard-layout">
+        <div class="sidebar">
+            <h1>Aurora</h1>
+            <div id="user-info" aria-live="polite"></div>
+            <div class="button-group">
+                <button id="profile-button" type="button">Profile</button>
+                <button id="settings-button" type="button">Settings</button>
+                <button id="logout-button" type="button">Log Out</button>
             </div>
 
-            <nav class="nav" aria-label="Account">
-                <button id="profile-button" class="nav-item" type="button">
-                    <i class="fa-solid fa-user"></i>
-                    <span>Profile</span>
-                </button>
-                <button id="settings-button" class="nav-item" type="button">
-                    <i class="fa-solid fa-gear"></i>
-                    <span>Settings</span>
-                </button>
-            </nav>
-
-            <section class="sidebar-section" aria-label="Active users">
-                <h2 class="section-label">
-                    <span>Active</span>
-                    <span id="online-count">1</span>
-                </h2>
+            <div class="active-users-card">
+                <h3>Active Users</h3>
                 <div id="online-users-list" class="active-users-list" aria-live="polite"></div>
-            </section>
+            </div>
 
-            <div class="sidebar-footer">
-                <div class="avatar-wrap avatar-wrap--footer">
-                    <img id="current-user-avatar" class="avatar" alt="">
-                    <span class="status-dot" data-status="online"></span>
+            <div id="call-panel" class="call-panel">
+                <div class="call-panel-status" aria-live="polite">
+                    <span class="call-panel-dot"></span>
+                    <span id="call-panel-status">No one is in a call</span>
                 </div>
-                <div class="user-meta">
-                    <span id="current-user-name" class="user-name"></span>
-                    <span id="user-info" class="user-status" aria-live="polite"></span>
-                </div>
-                <button id="logout-button" class="icon-button" type="button" aria-label="Log out" title="Log out">
-                    <i class="fa-solid fa-arrow-right-from-bracket"></i>
+                <button id="group-call-btn" class="call-panel-btn" type="button">
+                    <i class="fa-solid fa-video"></i>
+                    <span id="group-call-label">Start group call</span>
                 </button>
             </div>
-        </aside>
+        </div>
 
-        <main class="chat">
-            <header class="chat-header">
-                <button id="menu-button" class="icon-button menu-button" type="button" aria-label="Open sidebar" aria-controls="sidebar" aria-expanded="false">
-                    <i class="fa-solid fa-bars"></i>
+        <div class="chat-panel">
+            <div id="message-box" role="log" aria-live="polite" aria-label="Chat messages"></div>
+
+            <form id="message-form" class="chat-input-group">
+                <button id="attach-button" type="button" class="attach-button" aria-label="Attach image or video">
+                    <i class="fa-solid fa-paperclip"></i>
                 </button>
-                <h2 class="chat-title">
-                    <i class="fa-solid fa-hashtag"></i>
-                    <span>General</span>
-                </h2>
-                <span id="header-online-count" class="chat-meta">1 online</span>
-            </header>
-
-            <div id="message-box" class="message-box" role="log" aria-live="polite" aria-label="Chat messages"></div>
-
-            <form id="message-form" class="composer">
-                <div class="composer-field">
-                    <button id="attach-button" type="button" class="icon-button" aria-label="Attach image or video">
-                        <i class="fa-solid fa-paperclip"></i>
-                    </button>
-                    <input type="file" id="image-file-input" accept="image/*,video/*" class="hidden" aria-hidden="true" tabindex="-1">
-                    <input type="text" id="message-input" placeholder="Message #General" autocomplete="off" aria-label="Message">
-                    <button id="send-button" class="icon-button composer-send" type="submit" aria-label="Send message" disabled>
-                        <i class="fa-solid fa-paper-plane"></i>
-                    </button>
-                </div>
+                <input type="file" id="image-file-input" accept="image/*,video/*" class="hidden" aria-hidden="true">
+                <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off" aria-label="Message">
+                <button id="send-button" type="submit">Send</button>
             </form>
-        </main>
-
-        <aside id="thread-panel" class="thread hidden" aria-label="Thread">
-            <header class="thread-header">
-                <div class="thread-heading">
-                    <h2 class="thread-title">Thread</h2>
-                    <span class="chat-meta"># General</span>
-                </div>
-                <button id="thread-close" class="icon-button" type="button" aria-label="Close thread">
-                    <i class="fa-solid fa-xmark"></i>
-                </button>
-            </header>
-
-            <div id="thread-body" class="thread-body"></div>
-
-            <form id="thread-form" class="composer">
-                <div class="composer-field">
-                    <input type="text" id="thread-input" placeholder="Reply in thread" autocomplete="off" aria-label="Reply in thread">
-                    <button id="thread-send" class="icon-button composer-send" type="submit" aria-label="Send reply" disabled>
-                        <i class="fa-solid fa-paper-plane"></i>
-                    </button>
-                </div>
-            </form>
-        </aside>
+        </div>
     </div>
 
     <div id="image-modal" class="image-modal hidden" role="dialog" aria-modal="true" aria-label="Image preview">
         <div class="image-modal-content">
-            <button id="image-modal-close" class="image-modal-close icon-button" type="button" aria-label="Close image preview">
-                <i class="fa-solid fa-xmark"></i>
-            </button>
+            <button id="image-modal-close" class="image-modal-close" type="button" aria-label="Close image preview">&times;</button>
             <img id="image-modal-img" src="" alt="Enlarged view">
+        </div>
+    </div>
+
+    <div id="call-modal" class="call-modal hidden" role="dialog" aria-modal="false" aria-labelledby="call-title">
+        <div class="call-window">
+            <header class="call-header">
+                <div class="call-heading">
+                    <h2 id="call-title" class="call-title">
+                        <span class="call-live-dot"></span>
+                        Group call
+                    </h2>
+                    <p id="call-status" class="call-subtitle" aria-live="polite">Waiting for others to join</p>
+                </div>
+                <div class="call-count" title="People in the call">
+                    <i class="fa-solid fa-user-group"></i>
+                    <span id="call-count">1</span>
+                </div>
+            </header>
+
+            <button id="audio-unlock" class="audio-unlock hidden" type="button">
+                <i class="fa-solid fa-volume-high"></i>
+                Sound is blocked. Click to turn it on
+            </button>
+
+            <div id="video-grid" class="video-grid" data-count="1"></div>
+
+            <div id="stream-overlay" class="stream-overlay hidden" role="dialog" aria-modal="true" aria-label="Full screen stream">
+                <div class="stream-overlay-header">
+                    <button id="stream-overlay-back" class="stream-overlay-back" type="button">
+                        <i class="fa-solid fa-arrow-left"></i>
+                        <span>Back</span>
+                    </button>
+                    <span id="stream-overlay-title" class="stream-overlay-title"></span>
+                </div>
+                <div class="stream-overlay-body">
+                    <video id="stream-overlay-video" autoplay playsinline muted></video>
+                </div>
+            </div>
+
+            <footer class="call-controls">
+                <button id="mic-button" class="call-btn" type="button" aria-label="Mute microphone" aria-pressed="false">
+                    <i class="fa-solid fa-microphone"></i>
+                </button>
+                <button id="cam-button" class="call-btn" type="button" aria-label="Turn on camera" aria-pressed="true">
+                    <i class="fa-solid fa-video-slash"></i>
+                </button>
+                <button id="screen-share-button" class="call-btn" type="button" aria-label="Share your screen" aria-pressed="false">
+                    <i class="fa-solid fa-display"></i>
+                </button>
+                <button id="audio-share-button" class="call-btn" type="button" aria-label="Play device audio to others" aria-pressed="false">
+                    <i class="fa-solid fa-music"></i>
+                </button>
+                <button id="hangup-button" class="call-btn leave" type="button">
+                    <i class="fa-solid fa-phone-slash"></i>
+                    <span>Leave</span>
+                </button>
+            </footer>
         </div>
     </div>
 
     <script type="module" src="general.js"></script>
 </body>
 </html>
-
-/* work bro!!! */

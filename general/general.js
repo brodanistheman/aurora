@@ -1,38 +1,44 @@
-const $ = (id) => document.getElementById(id);
+const messageBox = document.getElementById("message-box");
+const messageForm = document.getElementById("message-form");
+const messageInput = document.getElementById("message-input");
+const sendButton = document.getElementById("send-button");
+const imageInput = document.getElementById("image-file-input");
+const attachButton = document.getElementById("attach-button");
 
-const sidebar = $("sidebar");
-const sidebarBackdrop = $("sidebar-backdrop");
-const menuButton = $("menu-button");
+const imageModal = document.getElementById("image-modal");
+const imageModalImg = document.getElementById("image-modal-img");
+const imageModalClose = document.getElementById("image-modal-close");
 
-const messageBox = $("message-box");
-const messageForm = $("message-form");
-const messageInput = $("message-input");
-const sendButton = $("send-button");
-const imageInput = $("image-file-input");
-const attachButton = $("attach-button");
+const onlineUsersList = document.getElementById("online-users-list");
+const onlineCount = document.getElementById("online-count");
 
-const threadPanel = $("thread-panel");
-const threadBody = $("thread-body");
-const threadForm = $("thread-form");
-const threadInput = $("thread-input");
-const threadSend = $("thread-send");
-const threadClose = $("thread-close");
+const currentUserName = document.getElementById("current-user-name");
+const currentUserAvatar = document.getElementById("current-user-avatar");
+const userInfo = document.getElementById("user-info");
 
-const imageModal = $("image-modal");
-const imageModalImg = $("image-modal-img");
-const imageModalClose = $("image-modal-close");
+const profileButton = document.getElementById("profile-button");
+const settingsButton = document.getElementById("settings-button");
+const logoutButton = document.getElementById("logout-button");
 
-const onlineUsersList = $("online-users-list");
-const onlineCount = $("online-count");
-const headerOnlineCount = $("header-online-count");
+const callModal = document.getElementById("call-modal");
+const videoGrid = document.getElementById("video-grid");
+const hangupButton = document.getElementById("hangup-button");
+const micButton = document.getElementById("mic-button");
+const camButton = document.getElementById("cam-button");
+const screenShareButton = document.getElementById("screen-share-button");
+const audioShareButton = document.getElementById("audio-share-button");
+const callStatus = document.getElementById("call-status");
+const callCount = document.getElementById("call-count");
+const groupCallButton = document.getElementById("group-call-btn");
+const groupCallLabel = document.getElementById("group-call-label");
+const callPanel = document.getElementById("call-panel");
+const callPanelStatus = document.getElementById("call-panel-status");
 
-const currentUserName = $("current-user-name");
-const currentUserAvatar = $("current-user-avatar");
-const userInfo = $("user-info");
-
-const profileButton = $("profile-button");
-const settingsButton = $("settings-button");
-const logoutButton = $("logout-button");
+const audioUnlock = document.getElementById("audio-unlock");
+const streamOverlay = document.getElementById("stream-overlay");
+const streamOverlayBack = document.getElementById("stream-overlay-back");
+const streamOverlayTitle = document.getElementById("stream-overlay-title");
+const streamOverlayVideo = document.getElementById("stream-overlay-video");
 
 const STORAGE_KEY = "aurora_client_messages";
 const USER_KEY = "aurora_client_user";
@@ -40,29 +46,29 @@ const USER_KEY = "aurora_client_user";
 const MAX_IMAGE_BYTES = 100 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 
-const GROUP_WINDOW_MS = 5 * 60 * 1000;
-
-const STATUS_LABELS = {
-    online: "Online",
-    away: "Away",
-    offline: "Offline"
-};
-
 const defaultAvatar =
     "data:image/svg+xml;utf8," +
     encodeURIComponent(`
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-            <rect width="100" height="100" fill="#1a1a1a"/>
-            <circle cx="50" cy="37" r="17" fill="#6a6a67"/>
-            <path d="M20 88c4-22 16-31 30-31s26 9 30 31" fill="#6a6a67"/>
+            <rect width="100" height="100" fill="#18181a"/>
+            <circle cx="50" cy="37" r="17" fill="#77777c"/>
+            <path d="M20 88c4-22 16-31 30-31s26 9 30 31" fill="#77777c"/>
         </svg>
     `);
 
 let messages = [];
-
 let editingMessageId = null;
-let editingContext = null;
-let openThreadId = null;
+
+let localStream = null;
+let screenStream = null;
+let inCall = false;
+let micOn = true;
+let camOn = false;
+let isScreenSharing = false;
+let isSharingDeviceAudio = false;
+
+let remoteAudio = {};
+let remoteMedia = {};
 
 let currentUser = {
     id: crypto.randomUUID(),
@@ -70,8 +76,6 @@ let currentUser = {
     profilePic: defaultAvatar
 };
 
-
-/* ---------- User ---------- */
 
 function loadUser() {
     try {
@@ -104,24 +108,14 @@ function applyUser() {
     }
 
     if (userInfo) {
-        userInfo.textContent = STATUS_LABELS.online;
+        userInfo.textContent = "Local client";
     }
 
     if (currentUserAvatar) {
         currentUserAvatar.src = currentUser.profilePic;
-
-        currentUserAvatar.addEventListener(
-            "error",
-            () => {
-                currentUserAvatar.src = defaultAvatar;
-            },
-            { once: true }
-        );
     }
 }
 
-
-/* ---------- Helpers ---------- */
 
 function escapeHtml(value) {
     if (value === null || value === undefined) {
@@ -146,97 +140,6 @@ function formatText(value) {
     );
 }
 
-
-function formatTimestamp(timestamp) {
-    if (!timestamp) {
-        return "";
-    }
-
-    const date = new Date(timestamp);
-    const now = new Date();
-
-    const time = date.toLocaleTimeString([], {
-        hour: "numeric",
-        minute: "2-digit"
-    });
-
-    if (date.toDateString() === now.toDateString()) {
-        return time;
-    }
-
-    const day = date.toLocaleDateString([], {
-        month: "short",
-        day: "numeric"
-    });
-
-    return `${day}, ${time}`;
-}
-
-
-function formatShortTime(timestamp) {
-    if (!timestamp) {
-        return "";
-    }
-
-    return new Date(timestamp)
-        .toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-        .replace(/\s?[AP]M$/i, "");
-}
-
-
-function pluralizeReplies(count) {
-    return count === 1 ? "1 reply" : `${count} replies`;
-}
-
-
-function getReplies(parentId) {
-    return messages.filter((message) => message.threadOf === parentId);
-}
-
-
-function isGrouped(previous, current, inThread) {
-    if (!previous) {
-        return false;
-    }
-
-    if (previous.uid !== current.uid) {
-        return false;
-    }
-
-    if (current.createdAt - previous.createdAt > GROUP_WINDOW_MS) {
-        return false;
-    }
-
-    if (!inThread && getReplies(previous.id).length) {
-        return false;
-    }
-
-    return true;
-}
-
-
-function captureScroll(element) {
-    return {
-        top: element.scrollTop,
-        atBottom:
-            element.scrollHeight -
-                element.scrollTop -
-                element.clientHeight <
-            48
-    };
-}
-
-
-function restoreScroll(element, state, forceBottom) {
-    if (forceBottom || state.atBottom) {
-        element.scrollTop = element.scrollHeight;
-    } else {
-        element.scrollTop = state.top;
-    }
-}
-
-
-/* ---------- Storage ---------- */
 
 function loadMessages() {
     try {
@@ -265,327 +168,147 @@ function saveMessages() {
 }
 
 
-/* ---------- Message rendering ---------- */
-
-function buildEditForm(message) {
-    const form = document.createElement("form");
-
-    form.className = "edit-form";
-
-    const input = document.createElement("input");
-
-    input.type = "text";
-    input.className = "edit-input";
-    input.value = message.text || "";
-    input.setAttribute("aria-label", "Edit message");
-    input.autocomplete = "off";
-
-    const actions = document.createElement("div");
-
-    actions.className = "edit-actions";
-
-    const save = document.createElement("button");
-
-    save.type = "submit";
-    save.className = "edit-save";
-    save.textContent = "Save";
-
-    const cancel = document.createElement("button");
-
-    cancel.type = "button";
-    cancel.className = "edit-cancel";
-    cancel.textContent = "Cancel";
-
-    actions.append(save, cancel);
-    form.append(input, actions);
-
-    const finish = () => {
-        editingMessageId = null;
-        editingContext = null;
-        renderAll();
-    };
-
-    form.addEventListener("submit", (event) => {
-        event.preventDefault();
-
-        const value = input.value.trim();
-
-        if (!value) {
-            return;
-        }
-
-        if (value !== message.text) {
-            message.text = value;
-            message.edited = true;
-
-            saveMessages();
-        }
-
-        finish();
-    });
-
-    cancel.addEventListener("click", finish);
-
-    input.addEventListener("keydown", (event) => {
-        if (event.key === "Escape") {
-            event.stopPropagation();
-            finish();
-        }
-    });
-
-    return form;
-}
-
-
-function createActionButton(className, label, iconClass, handler) {
-    const button = document.createElement("button");
-
-    button.type = "button";
-    button.className = `icon-button ${className}`;
-    button.title = label;
-    button.setAttribute("aria-label", label);
-    button.innerHTML = `<i class="${iconClass}"></i>`;
-
-    button.addEventListener("click", handler);
-
-    return button;
-}
-
-
-function createMessageElement(message, options = {}) {
-    const { grouped = false, inThread = false } = options;
-
-    const context = inThread ? "thread" : "feed";
-
-    const isEditing =
-        editingMessageId === message.id && editingContext === context;
-
-    const replies = inThread ? [] : getReplies(message.id);
-
-    const canEdit = message.uid === currentUser.id && Boolean(message.text);
-
+function createMessageElement(message) {
     const element = document.createElement("div");
 
-    element.className = grouped ? "message is-grouped" : "message";
+    element.className = "chat-message";
     element.dataset.messageId = message.id;
 
-    /* Gutter: avatar, or time for grouped rows */
+    const avatar = message.profilePic || defaultAvatar;
 
-    const gutter = document.createElement("div");
+    const editButton =
+        message.uid === currentUser.id && message.text
+            ? `
+                <button
+                    type="button"
+                    class="chat-edit-btn"
+                    title="Edit"
+                    aria-label="Edit message"
+                >
+                    <i class="fa-solid fa-pen"></i>
+                </button>
+            `
+            : "";
 
-    gutter.className = "message-gutter";
+    let content = "";
 
-    if (grouped) {
-        const time = document.createElement("span");
+    if (message.text) {
+        content += `
+            <span class="chat-message-text">
+                ${formatText(message.text)}
+            </span>
+        `;
 
-        time.className = "message-gutter-time";
-        time.textContent = formatShortTime(message.createdAt);
-
-        gutter.appendChild(time);
-    } else {
-        const avatar = document.createElement("img");
-
-        avatar.className = "avatar";
-        avatar.alt = "";
-        avatar.src = message.profilePic || defaultAvatar;
-
-        avatar.addEventListener(
-            "error",
-            () => {
-                avatar.src = defaultAvatar;
-            },
-            { once: true }
-        );
-
-        gutter.appendChild(avatar);
-    }
-
-    /* Main column */
-
-    const main = document.createElement("div");
-
-    main.className = "message-main";
-
-    if (!grouped) {
-        const meta = document.createElement("div");
-
-        meta.className = "message-meta";
-
-        const name = document.createElement("span");
-
-        name.className = "message-name";
-        name.textContent = message.displayName || "Guest";
-
-        const time = document.createElement("time");
-
-        time.className = "message-time";
-        time.textContent = formatTimestamp(message.createdAt);
-
-        if (message.createdAt) {
-            time.dateTime = new Date(message.createdAt).toISOString();
-        }
-
-        meta.append(name, time);
-        main.appendChild(meta);
-    }
-
-    const body = document.createElement("div");
-
-    body.className = "message-body";
-
-    if (isEditing) {
-        body.appendChild(buildEditForm(message));
-    } else {
-        if (message.text) {
-            const text = document.createElement("span");
-
-            text.className = "message-text";
-            text.innerHTML = formatText(message.text);
-
-            body.appendChild(text);
-
-            if (message.edited) {
-                const edited = document.createElement("span");
-
-                edited.className = "message-edited";
-                edited.textContent = "(edited)";
-
-                body.appendChild(edited);
-            }
-        }
-
-        if (message.imageUrl) {
-            const wrap = document.createElement("div");
-
-            wrap.className = "message-media";
-
-            const image = document.createElement("img");
-
-            image.className = "message-image";
-            image.alt = "Attached image";
-            image.src = message.imageUrl;
-
-            image.addEventListener("click", () => {
-                openLightbox(image.src);
-            });
-
-            wrap.appendChild(image);
-            body.appendChild(wrap);
-        }
-
-        if (message.videoUrl) {
-            const wrap = document.createElement("div");
-
-            wrap.className = "message-media";
-
-            const video = document.createElement("video");
-
-            video.className = "message-video";
-            video.src = message.videoUrl;
-            video.controls = true;
-            video.preload = "metadata";
-
-            wrap.appendChild(video);
-            body.appendChild(wrap);
+        if (message.edited) {
+            content += `<span class="edited-tag"> (edited)</span>`;
         }
     }
 
-    main.appendChild(body);
+    if (message.imageUrl) {
+        content += `
+            <div style="margin-top: 6px;">
+                <img
+                    src="${message.imageUrl}"
+                    class="chat-message-image clickable-image"
+                    alt="Attached image"
+                >
+            </div>
+        `;
+    }
 
-    /* Thread summary link */
+    if (message.videoUrl) {
+        content += `
+            <div style="margin-top: 6px;">
+                <video
+                    src="${message.videoUrl}"
+                    class="chat-message-video"
+                    controls
+                    preload="metadata"
+                ></video>
+            </div>
+        `;
+    }
 
-    if (!inThread && replies.length && !isEditing) {
-        const link = document.createElement("button");
+    element.innerHTML = `
+        <img
+            src="${avatar}"
+            alt=""
+            class="chat-profile-pic"
+        >
 
-        link.type = "button";
-        link.className = "thread-link";
+        <div class="chat-message-content">
 
-        const count = document.createElement("span");
+            <div class="chat-message-header">
 
-        count.className = "thread-link-count";
-        count.textContent = pluralizeReplies(replies.length);
+                <span class="chat-sender-name">
+                    ${escapeHtml(message.displayName)}
+                </span>
 
-        const last = document.createElement("span");
+                <div class="chat-message-actions">
+                    ${editButton}
+                </div>
 
-        last.className = "thread-link-time";
-        last.textContent = `Last reply ${formatTimestamp(
-            replies[replies.length - 1].createdAt
-        )}`;
+            </div>
 
-        link.append(count, last);
+            <div class="chat-message-body">
+                ${content}
+            </div>
 
-        link.addEventListener("click", () => {
-            openThread(message.id);
+        </div>
+    `;
+
+    const avatarElement = element.querySelector(".chat-profile-pic");
+
+    avatarElement.addEventListener("error", () => {
+        avatarElement.src = defaultAvatar;
+    });
+
+    const editButtonElement = element.querySelector(".chat-edit-btn");
+
+    if (editButtonElement) {
+        editButtonElement.addEventListener("click", () => {
+            startEditingMessage(message.id);
         });
-
-        main.appendChild(link);
     }
 
-    element.append(gutter, main);
+    const image = element.querySelector(".clickable-image");
 
-    /* Hover tools */
-
-    if (!isEditing && (!inThread || canEdit)) {
-        const actions = document.createElement("div");
-
-        actions.className = "message-actions";
-
-        if (!inThread) {
-            actions.appendChild(
-                createActionButton(
-                    "thread-action",
-                    "Reply in thread",
-                    "fa-regular fa-comment",
-                    () => openThread(message.id)
-                )
-            );
-        }
-
-        if (canEdit) {
-            actions.appendChild(
-                createActionButton(
-                    "edit-action",
-                    "Edit message",
-                    "fa-solid fa-pen",
-                    () => startEditingMessage(message.id, context)
-                )
-            );
-        }
-
-        element.appendChild(actions);
+    if (image) {
+        image.addEventListener("click", () => {
+            openLightbox(image.src);
+        });
     }
 
     return element;
 }
 
 
-function renderMessageList(container, items, inThread) {
-    let previous = null;
-
-    items.forEach((message) => {
-        const grouped = isGrouped(previous, message, inThread);
-
-        container.appendChild(
-            createMessageElement(message, { grouped, inThread })
-        );
-
-        previous = message;
-    });
-}
-
-
-function renderFeed(forceBottom = false) {
+function renderMessages() {
     if (!messageBox) {
         return;
     }
 
-    const scroll = captureScroll(messageBox);
-
     messageBox.innerHTML = "";
 
-    const items = messages.filter((message) => !message.threadOf);
+    const introduction = document.createElement("div");
 
-    if (!items.length) {
+    introduction.className = "chat-introduction";
+
+    introduction.innerHTML = `
+        <div class="introduction-icon">
+            <i class="fa-solid fa-hashtag"></i>
+        </div>
+
+        <h2>Welcome to General</h2>
+
+        <p>
+            This is the beginning of this conversation.
+        </p>
+    `;
+
+    messageBox.appendChild(introduction);
+
+    if (!messages.length) {
         const empty = document.createElement("p");
 
         empty.className = "empty-state";
@@ -596,150 +319,124 @@ function renderFeed(forceBottom = false) {
         return;
     }
 
-    renderMessageList(messageBox, items, false);
+    messages.forEach((message) => {
+        messageBox.appendChild(createMessageElement(message));
+    });
 
-    restoreScroll(messageBox, scroll, forceBottom);
+    requestAnimationFrame(() => {
+        messageBox.scrollTop = messageBox.scrollHeight;
+    });
 }
 
 
-function renderThread(forceBottom = false) {
-    if (!threadPanel || !threadBody) {
+function startEditingMessage(id) {
+    if (editingMessageId) {
         return;
     }
 
-    const parent = openThreadId
-        ? messages.find((message) => message.id === openThreadId)
-        : null;
-
-    if (!parent) {
-        openThreadId = null;
-
-        threadPanel.classList.add("hidden");
-        threadBody.innerHTML = "";
-
-        return;
-    }
-
-    threadPanel.classList.remove("hidden");
-
-    const scroll = captureScroll(threadBody);
-
-    threadBody.innerHTML = "";
-
-    const parentWrap = document.createElement("div");
-
-    parentWrap.className = "thread-parent";
-
-    parentWrap.appendChild(
-        createMessageElement(parent, { grouped: false, inThread: true })
-    );
-
-    threadBody.appendChild(parentWrap);
-
-    const replies = getReplies(parent.id);
-
-    const divider = document.createElement("div");
-
-    divider.className = "thread-divider";
-    divider.textContent = replies.length
-        ? pluralizeReplies(replies.length)
-        : "No replies yet";
-
-    threadBody.appendChild(divider);
-
-    if (replies.length) {
-        const list = document.createElement("div");
-
-        list.className = "thread-replies";
-
-        renderMessageList(list, replies, true);
-
-        threadBody.appendChild(list);
-    }
-
-    restoreScroll(threadBody, scroll, forceBottom);
-}
-
-
-function renderAll(options = {}) {
-    const { feedBottom = false, threadBottom = false } = options;
-
-    renderFeed(feedBottom);
-    renderThread(threadBottom);
-
-    focusEditInput();
-}
-
-
-function focusEditInput() {
-    if (!editingMessageId) {
-        return;
-    }
-
-    const input = document.querySelector(".edit-input");
-
-    if (input && document.activeElement !== input) {
-        input.focus();
-
-        input.setSelectionRange(input.value.length, input.value.length);
-    }
-}
-
-
-/* ---------- Editing ---------- */
-
-function startEditingMessage(id, context) {
     const message = messages.find((item) => item.id === id);
 
     if (!message || message.uid !== currentUser.id) {
         return;
     }
 
-    editingMessageId = id;
-    editingContext = context;
+    const element = messageBox.querySelector(
+        `[data-message-id="${CSS.escape(id)}"]`
+    );
 
-    renderAll();
-}
-
-
-/* ---------- Threads ---------- */
-
-function openThread(id) {
-    const message = messages.find((item) => item.id === id);
-
-    if (!message) {
+    if (!element) {
         return;
     }
 
-    const rootId = message.threadOf || message.id;
+    const body = element.querySelector(".chat-message-body");
 
-    openThreadId = rootId;
-
-    closeSidebar();
-
-    renderAll({ threadBottom: true });
-
-    if (threadInput && !window.matchMedia("(pointer: coarse)").matches) {
-        threadInput.focus();
+    if (!body) {
+        return;
     }
-}
 
+    editingMessageId = id;
 
-function closeThread() {
-    openThreadId = null;
+    const original = message.text || "";
 
-    if (editingContext === "thread") {
+    body.innerHTML = `
+        <div class="chat-edit-form">
+
+            <input
+                type="text"
+                class="chat-edit-input"
+                value="${escapeHtml(original)}"
+            >
+
+            <div class="chat-edit-actions">
+
+                <button
+                    type="button"
+                    class="chat-edit-save"
+                >
+                    Save
+                </button>
+
+                <button
+                    type="button"
+                    class="chat-edit-cancel"
+                >
+                    Cancel
+                </button>
+
+            </div>
+
+        </div>
+    `;
+
+    const input = body.querySelector(".chat-edit-input");
+    const save = body.querySelector(".chat-edit-save");
+    const cancel = body.querySelector(".chat-edit-cancel");
+
+    const cancelEdit = () => {
         editingMessageId = null;
-        editingContext = null;
-    }
+        renderMessages();
+    };
 
-    renderAll();
+    const saveEdit = () => {
+        const value = input.value.trim();
+
+        if (!value) {
+            return;
+        }
+
+        message.text = value;
+        message.edited = true;
+
+        saveMessages();
+
+        editingMessageId = null;
+
+        renderMessages();
+    };
+
+    save.addEventListener("click", saveEdit);
+    cancel.addEventListener("click", cancelEdit);
+
+    input.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+            saveEdit();
+        }
+
+        if (event.key === "Escape") {
+            cancelEdit();
+        }
+    });
+
+    input.focus();
+
+    input.setSelectionRange(
+        input.value.length,
+        input.value.length
+    );
 }
 
 
-/* ---------- Sending ---------- */
-
-function sendMessage(text, attachment = null, threadOf = null) {
+function sendMessage(text, attachment = null) {
     const cleanText = text.trim();
 
     if (!cleanText && !attachment) {
@@ -758,10 +455,6 @@ function sendMessage(text, attachment = null, threadOf = null) {
         edited: false
     };
 
-    if (threadOf) {
-        message.threadOf = threadOf;
-    }
-
     if (attachment) {
         if (attachment.type === "image") {
             message.imageUrl = attachment.url;
@@ -776,37 +469,11 @@ function sendMessage(text, attachment = null, threadOf = null) {
 
     saveMessages();
 
-    if (threadOf) {
-        renderAll({ threadBottom: true });
-
-        if (threadInput) {
-            threadInput.value = "";
-            threadInput.focus();
-        }
-
-        updateSendStates();
-
-        return;
-    }
-
-    renderAll({ feedBottom: true });
+    renderMessages();
 
     if (messageInput) {
         messageInput.value = "";
         messageInput.focus();
-    }
-
-    updateSendStates();
-}
-
-
-function updateSendStates() {
-    if (sendButton && messageInput) {
-        sendButton.disabled = !messageInput.value.trim();
-    }
-
-    if (threadSend && threadInput) {
-        threadSend.disabled = !threadInput.value.trim();
     }
 }
 
@@ -824,7 +491,9 @@ function handleMediaFile(file) {
         return;
     }
 
-    const maximum = isImage ? MAX_IMAGE_BYTES : MAX_VIDEO_BYTES;
+    const maximum = isImage
+        ? MAX_IMAGE_BYTES
+        : MAX_VIDEO_BYTES;
 
     if (file.size > maximum) {
         alert(
@@ -837,10 +506,13 @@ function handleMediaFile(file) {
     const reader = new FileReader();
 
     reader.onload = (event) => {
-        sendMessage(messageInput ? messageInput.value : "", {
-            type: isImage ? "image" : "video",
-            url: event.target.result
-        });
+        sendMessage(
+            messageInput ? messageInput.value : "",
+            {
+                type: isImage ? "image" : "video",
+                url: event.target.result
+            }
+        );
 
         if (imageInput) {
             imageInput.value = "";
@@ -850,8 +522,6 @@ function handleMediaFile(file) {
     reader.readAsDataURL(file);
 }
 
-
-/* ---------- Image preview ---------- */
 
 function openLightbox(src) {
     if (!imageModal || !imageModalImg) {
@@ -876,44 +546,6 @@ function closeLightbox() {
 }
 
 
-/* ---------- Sidebar drawer (small screens) ---------- */
-
-function openSidebar() {
-    if (!sidebar) {
-        return;
-    }
-
-    sidebar.classList.add("is-open");
-
-    if (sidebarBackdrop) {
-        sidebarBackdrop.classList.add("is-visible");
-    }
-
-    if (menuButton) {
-        menuButton.setAttribute("aria-expanded", "true");
-    }
-}
-
-
-function closeSidebar() {
-    if (!sidebar) {
-        return;
-    }
-
-    sidebar.classList.remove("is-open");
-
-    if (sidebarBackdrop) {
-        sidebarBackdrop.classList.remove("is-visible");
-    }
-
-    if (menuButton) {
-        menuButton.setAttribute("aria-expanded", "false");
-    }
-}
-
-
-/* ---------- Events ---------- */
-
 function setupMessageEvents() {
     if (attachButton && imageInput) {
         attachButton.addEventListener("click", () => {
@@ -926,20 +558,22 @@ function setupMessageEvents() {
     }
 
     if (messageInput) {
-        messageInput.addEventListener("input", updateSendStates);
-
         messageInput.addEventListener("paste", (event) => {
             const items = event.clipboardData?.items || [];
 
             for (const item of items) {
                 if (
                     item.kind === "file" &&
-                    (item.type.startsWith("image/") ||
-                        item.type.startsWith("video/"))
+                    (
+                        item.type.startsWith("image/") ||
+                        item.type.startsWith("video/")
+                    )
                 ) {
                     event.preventDefault();
 
-                    handleMediaFile(item.getAsFile());
+                    const file = item.getAsFile();
+
+                    handleMediaFile(file);
 
                     return;
                 }
@@ -951,28 +585,12 @@ function setupMessageEvents() {
         messageForm.addEventListener("submit", (event) => {
             event.preventDefault();
 
-            sendMessage(messageInput.value);
-        });
-    }
-
-    if (threadInput) {
-        threadInput.addEventListener("input", updateSendStates);
-    }
-
-    if (threadForm) {
-        threadForm.addEventListener("submit", (event) => {
-            event.preventDefault();
-
-            if (!openThreadId) {
+            if (editingMessageId) {
                 return;
             }
 
-            sendMessage(threadInput.value, null, openThreadId);
+            sendMessage(messageInput.value);
         });
-    }
-
-    if (threadClose) {
-        threadClose.addEventListener("click", closeThread);
     }
 
     if (imageModalClose) {
@@ -987,43 +605,585 @@ function setupMessageEvents() {
         });
     }
 
-    if (menuButton) {
-        menuButton.addEventListener("click", () => {
-            if (sidebar.classList.contains("is-open")) {
-                closeSidebar();
-            } else {
-                openSidebar();
-            }
+    document.addEventListener("keydown", (event) => {
+        if (
+            event.key === "Escape" &&
+            imageModal &&
+            !imageModal.classList.contains("hidden")
+        ) {
+            closeLightbox();
+        }
+    });
+}
+
+
+/* CALL SYSTEM */
+
+async function openCall() {
+    if (inCall) {
+        return;
+    }
+
+    try {
+        localStream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+            video: false
+        });
+
+        inCall = true;
+        micOn = true;
+        camOn = false;
+
+        showCallModal();
+
+        buildLocalTile();
+
+        updateCallControls();
+        updateCallStatus();
+
+    } catch (error) {
+        console.error(error);
+
+        alert(
+            "Aurora could not access your microphone. Check your browser permissions."
+        );
+    }
+}
+
+
+function showCallModal() {
+    if (callModal) {
+        callModal.classList.remove("hidden");
+    }
+}
+
+
+function hideCallModal() {
+    if (callModal) {
+        callModal.classList.add("hidden");
+    }
+}
+
+
+function buildLocalTile() {
+    if (!videoGrid) {
+        return;
+    }
+
+    const existing = videoGrid.querySelector('[data-tile-id="local"]');
+
+    if (existing) {
+        existing.remove();
+    }
+
+    const tile = document.createElement("div");
+
+    tile.className = "video-tile local";
+    tile.dataset.tileId = "local";
+    tile.dataset.name = currentUser.displayName;
+
+    const video = document.createElement("video");
+
+    video.autoplay = true;
+    video.playsInline = true;
+    video.muted = true;
+
+    video.srcObject = localStream;
+
+    const avatar = document.createElement("div");
+
+    avatar.className = "tile-avatar";
+
+    const avatarImage = document.createElement("img");
+
+    avatarImage.src = currentUser.profilePic;
+    avatarImage.alt = "";
+
+    avatar.appendChild(avatarImage);
+
+    const status = document.createElement("div");
+
+    status.className = "tile-status";
+
+    const label = document.createElement("div");
+
+    label.className = "tile-label";
+
+    label.innerHTML = `
+        <i class="fa-solid fa-microphone-slash mic-icon"></i>
+        <i class="fa-solid fa-volume-xmark deafen-icon"></i>
+        <span>You</span>
+    `;
+
+    const presenting = document.createElement("div");
+
+    presenting.className = "tile-presenting-badge";
+
+    presenting.innerHTML = `
+        <i class="fa-solid fa-display"></i>
+        <span>Presenting</span>
+    `;
+
+    tile.append(
+        video,
+        avatar,
+        status,
+        label,
+        presenting
+    );
+
+    videoGrid.appendChild(tile);
+
+    updateGrid();
+}
+
+
+async function enableCamera() {
+    if (!inCall || camBusy) {
+        return;
+    }
+
+    camBusy = true;
+
+    try {
+        const cameraStream = await navigator.mediaDevices.getUserMedia({
+            video: true
+        });
+
+        const cameraTrack = cameraStream.getVideoTracks()[0];
+
+        if (localStream) {
+            localStream.addTrack(cameraTrack);
+        } else {
+            localStream = cameraStream;
+        }
+
+        camOn = true;
+
+        const tile = videoGrid?.querySelector(
+            '[data-tile-id="local"]'
+        );
+
+        if (tile) {
+            const video = tile.querySelector("video");
+
+            video.srcObject = localStream;
+
+            tile.classList.remove("cam-off");
+        }
+
+    } catch (error) {
+        console.error(error);
+
+        alert(
+            "Aurora could not access your camera. Check your browser permissions."
+        );
+    } finally {
+        camBusy = false;
+        updateCallControls();
+    }
+}
+
+
+function disableCamera() {
+    if (!localStream) {
+        return;
+    }
+
+    localStream.getVideoTracks().forEach((track) => {
+        track.stop();
+        localStream.removeTrack(track);
+    });
+
+    camOn = false;
+
+    const tile = videoGrid?.querySelector(
+        '[data-tile-id="local"]'
+    );
+
+    if (tile) {
+        tile.classList.add("cam-off");
+
+        const video = tile.querySelector("video");
+
+        if (video) {
+            video.srcObject = localStream;
+        }
+    }
+
+    updateCallControls();
+}
+
+
+async function toggleCamera() {
+    if (!inCall) {
+        return;
+    }
+
+    if (camOn) {
+        disableCamera();
+    } else {
+        await enableCamera();
+    }
+}
+
+
+function toggleMicrophone() {
+    if (!localStream) {
+        return;
+    }
+
+    const tracks = localStream.getAudioTracks();
+
+    if (!tracks.length) {
+        return;
+    }
+
+    micOn = !micOn;
+
+    tracks.forEach((track) => {
+        track.enabled = micOn;
+    });
+
+    updateCallControls();
+}
+
+
+async function toggleScreenShare() {
+    if (!inCall || screenShareBusy) {
+        return;
+    }
+
+    screenShareBusy = true;
+
+    try {
+        if (isScreenSharing) {
+            stopScreenShare();
+            return;
+        }
+
+        screenStream = await navigator.mediaDevices.getDisplayMedia({
+            video: true,
+            audio: true
+        });
+
+        const screenTrack = screenStream.getVideoTracks()[0];
+
+        const tile = videoGrid?.querySelector(
+            '[data-tile-id="local"]'
+        );
+
+        if (tile) {
+            const video = tile.querySelector("video");
+
+            video.srcObject = screenStream;
+
+            tile.classList.add("screen-sharing");
+
+            screenTrack.addEventListener("ended", () => {
+                stopScreenShare();
+            });
+        }
+
+        isScreenSharing = true;
+
+        if (streamOverlay) {
+            streamOverlay.classList.remove("hidden");
+        }
+
+        if (streamOverlayVideo) {
+            streamOverlayVideo.srcObject = screenStream;
+        }
+
+        if (streamOverlayTitle) {
+            streamOverlayTitle.textContent = "Your screen";
+        }
+
+    } catch (error) {
+        console.error(error);
+    } finally {
+        screenShareBusy = false;
+        updateCallControls();
+    }
+}
+
+
+function stopScreenShare() {
+    if (screenStream) {
+        screenStream.getTracks().forEach((track) => {
+            track.stop();
         });
     }
 
-    if (sidebarBackdrop) {
-        sidebarBackdrop.addEventListener("click", closeSidebar);
+    screenStream = null;
+    isScreenSharing = false;
+
+    const tile = videoGrid?.querySelector(
+        '[data-tile-id="local"]'
+    );
+
+    if (tile) {
+        tile.classList.remove("screen-sharing");
+
+        const video = tile.querySelector("video");
+
+        if (video) {
+            video.srcObject = localStream;
+        }
+    }
+
+    if (streamOverlayVideo) {
+        streamOverlayVideo.srcObject = null;
+    }
+
+    if (streamOverlay) {
+        streamOverlay.classList.add("hidden");
+    }
+
+    updateCallControls();
+}
+
+
+async function toggleDeviceAudio() {
+    if (!inCall || audioShareBusy) {
+        return;
+    }
+
+    audioShareBusy = true;
+
+    try {
+        if (isSharingDeviceAudio) {
+            isSharingDeviceAudio = false;
+            return;
+        }
+
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+            video: false,
+            audio: true
+        });
+
+        const audioTracks = stream.getAudioTracks();
+
+        if (!audioTracks.length) {
+            stream.getTracks().forEach((track) => track.stop());
+
+            alert("No device audio was selected.");
+
+            return;
+        }
+
+        audioTracks.forEach((track) => {
+            track.addEventListener("ended", () => {
+                isSharingDeviceAudio = false;
+                updateCallControls();
+            });
+        });
+
+        isSharingDeviceAudio = true;
+
+    } catch (error) {
+        console.error(error);
+    } finally {
+        audioShareBusy = false;
+        updateCallControls();
+    }
+}
+
+
+function updateCallControls() {
+    if (micButton) {
+        micButton.setAttribute(
+            "aria-pressed",
+            String(!micOn)
+        );
+
+        micButton.innerHTML = micOn
+            ? '<i class="fa-solid fa-microphone"></i>'
+            : '<i class="fa-solid fa-microphone-slash"></i>';
+    }
+
+    if (camButton) {
+        camButton.setAttribute(
+            "aria-pressed",
+            String(camOn)
+        );
+
+        camButton.innerHTML = camOn
+            ? '<i class="fa-solid fa-video"></i>'
+            : '<i class="fa-solid fa-video-slash"></i>';
+    }
+
+    if (screenShareButton) {
+        screenShareButton.setAttribute(
+            "aria-pressed",
+            String(isScreenSharing)
+        );
+    }
+
+    if (audioShareButton) {
+        audioShareButton.setAttribute(
+            "aria-pressed",
+            String(isSharingDeviceAudio)
+        );
+    }
+}
+
+
+function updateCallStatus() {
+    const count = videoGrid
+        ? videoGrid.querySelectorAll(".video-tile").length
+        : 0;
+
+    if (callCount) {
+        callCount.textContent = String(Math.max(count, 1));
+    }
+
+    if (callStatus) {
+        callStatus.textContent =
+            count <= 1
+                ? "Waiting for others to join"
+                : `${count} people in the call`;
+    }
+
+    if (callPanelStatus) {
+        callPanelStatus.textContent = inCall
+            ? "You are in a call"
+            : "No one is in a call";
+    }
+
+    if (groupCallLabel) {
+        groupCallLabel.textContent = inCall
+            ? "In call"
+            : "Start group call";
+    }
+}
+
+
+function updateGrid() {
+    if (!videoGrid) {
+        return;
+    }
+
+    const count = videoGrid.querySelectorAll(".video-tile").length;
+
+    videoGrid.dataset.count = String(count);
+
+    updateCallStatus();
+}
+
+
+function leaveCall() {
+    if (screenStream) {
+        stopScreenShare();
+    }
+
+    if (localStream) {
+        localStream.getTracks().forEach((track) => {
+            track.stop();
+        });
+    }
+
+    localStream = null;
+
+    Object.values(remoteAudio).forEach((audio) => {
+        try {
+            audio.pause();
+            audio.srcObject = null;
+        } catch {}
+    });
+
+    remoteAudio = {};
+
+    remoteMedia = {};
+
+    if (videoGrid) {
+        videoGrid.innerHTML = "";
+    }
+
+    inCall = false;
+    micOn = true;
+    camOn = false;
+    isScreenSharing = false;
+    isSharingDeviceAudio = false;
+
+    closeStreamOverlay();
+
+    hideCallModal();
+
+    updateCallControls();
+    updateCallStatus();
+}
+
+
+function closeStreamOverlay() {
+    if (streamOverlay) {
+        streamOverlay.classList.add("hidden");
+    }
+
+    if (streamOverlayVideo) {
+        streamOverlayVideo.srcObject = null;
+    }
+}
+
+
+function setupCallEvents() {
+    if (groupCallButton) {
+        groupCallButton.addEventListener("click", () => {
+            if (inCall) {
+                return;
+            }
+
+            openCall();
+        });
+    }
+
+    if (hangupButton) {
+        hangupButton.addEventListener("click", leaveCall);
+    }
+
+    if (micButton) {
+        micButton.addEventListener("click", toggleMicrophone);
+    }
+
+    if (camButton) {
+        camButton.addEventListener("click", toggleCamera);
+    }
+
+    if (screenShareButton) {
+        screenShareButton.addEventListener(
+            "click",
+            toggleScreenShare
+        );
+    }
+
+    if (audioShareButton) {
+        audioShareButton.addEventListener(
+            "click",
+            toggleDeviceAudio
+        );
+    }
+
+    if (streamOverlayBack) {
+        streamOverlayBack.addEventListener(
+            "click",
+            closeStreamOverlay
+        );
+    }
+
+    if (audioUnlock) {
+        audioUnlock.addEventListener("click", () => {
+            Object.values(remoteAudio).forEach((audio) => {
+                audio.play().catch(() => {});
+            });
+
+            audioUnlock.classList.add("hidden");
+        });
     }
 
     document.addEventListener("keydown", (event) => {
-        if (event.key !== "Escape") {
-            return;
+        if (event.key === "Escape") {
+            closeStreamOverlay();
         }
-
-        if (imageModal && !imageModal.classList.contains("hidden")) {
-            closeLightbox();
-            return;
-        }
-
-        if (editingMessageId) {
-            editingMessageId = null;
-            editingContext = null;
-            renderAll();
-            return;
-        }
-
-        if (openThreadId) {
-            closeThread();
-            return;
-        }
-
-        closeSidebar();
     });
 }
 
@@ -1031,23 +1191,21 @@ function setupMessageEvents() {
 function setupNavigation() {
     if (profileButton) {
         profileButton.addEventListener("click", () => {
-            closeSidebar();
-
             alert("Profile editing is not available in client mode.");
         });
     }
 
     if (settingsButton) {
         settingsButton.addEventListener("click", () => {
-            closeSidebar();
-
             alert("Settings are not available in client mode.");
         });
     }
 
     if (logoutButton) {
         logoutButton.addEventListener("click", () => {
-            const confirmed = confirm("Clear this local Aurora client session?");
+            const confirmed = confirm(
+                "Clear this local Aurora client session?"
+            );
 
             if (!confirmed) {
                 return;
@@ -1062,100 +1220,85 @@ function setupNavigation() {
 }
 
 
-/* ---------- Active users ---------- */
-
-function createActiveUserRow(user, status, isSelf) {
-    const row = document.createElement("div");
-
-    row.className = "active-user";
-
-    const wrap = document.createElement("div");
-
-    wrap.className = "avatar-wrap avatar-wrap--sm";
-
-    const avatar = document.createElement("img");
-
-    avatar.className = "avatar";
-    avatar.alt = "";
-    avatar.src = user.profilePic || defaultAvatar;
-
-    avatar.addEventListener(
-        "error",
-        () => {
-            avatar.src = defaultAvatar;
-        },
-        { once: true }
-    );
-
-    const dot = document.createElement("span");
-
-    dot.className = "status-dot";
-    dot.dataset.status = status;
-    dot.title = STATUS_LABELS[status] || "";
-
-    wrap.append(avatar, dot);
-
-    const name = document.createElement("span");
-
-    name.className = "active-user-name";
-    name.textContent = user.displayName;
-
-    row.append(wrap, name);
-
-    if (isSelf) {
-        const tag = document.createElement("span");
-
-        tag.className = "active-user-tag";
-        tag.textContent = "You";
-
-        row.appendChild(tag);
-    }
-
-    return row;
-}
-
-
 function setupOnlineUsers() {
     if (!onlineUsersList) {
         return;
     }
 
-    const users = [{ user: currentUser, status: "online", self: true }];
+    onlineUsersList.innerHTML = `
+        <div class="active-user-item">
 
-    onlineUsersList.innerHTML = "";
+            <div class="active-user-avatar-wrapper">
 
-    users.forEach((entry) => {
-        onlineUsersList.appendChild(
-            createActiveUserRow(entry.user, entry.status, entry.self)
-        );
-    });
+                <img
+                    src="${currentUser.profilePic}"
+                    class="active-user-avatar"
+                    alt=""
+                >
 
-    const online = users.filter((entry) => entry.status === "online").length;
+                <span class="active-user-dot status-online"></span>
+
+            </div>
+
+            <span class="active-user-name">
+                ${escapeHtml(currentUser.displayName)}
+            </span>
+
+        </div>
+    `;
 
     if (onlineCount) {
-        onlineCount.textContent = String(online);
-    }
-
-    if (headerOnlineCount) {
-        headerOnlineCount.textContent = `${online} online`;
+        onlineCount.textContent = "1";
     }
 }
 
 
-/* ---------- Init ---------- */
+function setupEmojiButton() {
+    const emojiButton = document.getElementById("emoji-button");
+
+    if (!emojiButton || !messageInput) {
+        return;
+    }
+
+    emojiButton.addEventListener("click", () => {
+        const emojis = ["🙂", "😂", "👍", "❤️", "🔥", "😭", "💀"];
+
+        const emoji =
+            emojis[Math.floor(Math.random() * emojis.length)];
+
+        const start = messageInput.selectionStart;
+        const end = messageInput.selectionEnd;
+
+        messageInput.value =
+            messageInput.value.slice(0, start) +
+            emoji +
+            messageInput.value.slice(end);
+
+        messageInput.focus();
+
+        messageInput.setSelectionRange(
+            start + emoji.length,
+            start + emoji.length
+        );
+    });
+}
+
 
 function initialize() {
     loadUser();
     applyUser();
 
     loadMessages();
-    renderAll({ feedBottom: true });
+    renderMessages();
 
     setupMessageEvents();
+    setupCallEvents();
     setupNavigation();
     setupOnlineUsers();
+    setupEmojiButton();
 
-    updateSendStates();
+    updateCallControls();
+    updateCallStatus();
 }
 
 
