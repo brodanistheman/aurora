@@ -18,7 +18,7 @@ const firebaseConfig = {
 
 const MODERATOR_UIDS = [
     "AQ1oLVW0fNgESU0H5GEvcycxYJ73",
-    "IW24TCbQSkamV2LdxSFObbBg9u73",
+    "IW24TCbQSkamV2LdxSFObbBg9u73"
 ];
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
