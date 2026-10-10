@@ -30,8 +30,7 @@
     background: var(--surface-raised);
 }
 
-.call-bar[data-mode="incoming"] .call-avatar,
-.call-bar[data-mode="outgoing"] .call-avatar {
+.call-bar[data-mode="incoming"] .call-avatar {
     animation: call-pulse 1.6s ease-out infinite;
 }
 
@@ -61,10 +60,6 @@
     font-size: 12px;
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
-}
-
-.call-bar[data-mode="active"] .call-status {
-    color: var(--ok);
 }
 
 .call-actions {
@@ -107,38 +102,109 @@
     color: var(--bg);
 }
 
-/* ---------- Video ---------- */
-.call-videos {
-    position: relative;
-    width: 100%;
-    max-width: 420px;
-    aspect-ratio: 16 / 9;
-    max-height: 236px;
-    overflow: hidden;
-    background: var(--bg);
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
+/* ---------- Participant grid ---------- */
+.call-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
 }
 
-.call-remote {
-    display: block;
+.call-tile {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    width: 76px;
+    min-width: 0;
+}
+
+.call-tile video {
+    display: none;
     width: 100%;
     height: 100%;
     object-fit: cover;
 }
 
-.call-local {
-    position: absolute;
-    right: 8px;
-    bottom: 8px;
-    width: 28%;
-    max-width: 120px;
-    aspect-ratio: 4 / 3;
+.call-tile.is-local video {
+    transform: scaleX(-1);
+}
+
+.call-tile-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
     object-fit: cover;
     background: var(--surface-raised);
-    border: 1px solid var(--line-strong);
+    transition: box-shadow 0.12s ease;
+}
+
+.call-tile.speaking .call-tile-avatar {
+    box-shadow: 0 0 0 2px var(--ok);
+}
+
+.call-tile-name {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.call-tile-state {
+    font-size: 10px;
+    color: var(--text-faint);
+}
+
+.call-tile-state:empty {
+    display: none;
+}
+
+/* Video calls: larger tiles that show the camera feed */
+.call-bar[data-video="true"] .call-tile {
+    width: calc(33.333% - 6px);
+    min-width: 120px;
+    max-width: 220px;
+    aspect-ratio: 16 / 10;
+    justify-content: center;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+
+.call-bar[data-video="true"] .call-tile.speaking {
+    border-color: var(--ok);
+}
+
+.call-bar[data-video="true"] .call-tile.has-video video {
+    display: block;
+    position: absolute;
+    inset: 0;
+}
+
+.call-bar[data-video="true"] .call-tile.has-video .call-tile-avatar {
+    display: none;
+}
+
+.call-bar[data-video="true"] .call-tile-name,
+.call-bar[data-video="true"] .call-tile-state {
+    position: absolute;
+    left: 6px;
+    padding: 1px 5px;
+    background: rgba(0, 0, 0, 0.6);
     border-radius: var(--radius-sm);
-    transform: scaleX(-1);
+    color: var(--text);
+}
+
+.call-bar[data-video="true"] .call-tile-name {
+    bottom: 6px;
+    max-width: calc(100% - 12px);
+}
+
+.call-bar[data-video="true"] .call-tile-state {
+    top: 6px;
 }
 
 /* ---------- Call buttons in the active users list ---------- */
@@ -180,14 +246,32 @@
     opacity: 1;
 }
 
-/* Hide call buttons while already in a call */
-body.in-call .user-actions {
-    display: none !important;
+/* While in a call the phone button becomes "add to call" and video is hidden */
+.user-call .icon-add {
+    display: none;
+}
+
+body.in-call .user-call .icon-call {
+    display: none;
+}
+
+body.in-call .user-call .icon-add {
+    display: inline;
+}
+
+body.in-call .user-call-video {
+    display: none;
+}
+
+body.in-call #group-call-button,
+body.in-call #group-video-button {
+    opacity: 0.4;
+    pointer-events: none;
 }
 
 @media (max-width: 720px) {
-    .call-videos {
-        max-width: 100%;
-        max-height: 200px;
+    .call-bar[data-video="true"] .call-tile {
+        width: calc(50% - 4px);
+        max-width: none;
     }
 }
