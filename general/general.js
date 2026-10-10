@@ -892,3 +892,4 @@ if (settingsButton) {
         window.location.href = '/aurora/settings/account/';
     });
 }
+
