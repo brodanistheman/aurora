@@ -4,190 +4,314 @@ import {
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 
 /* ==========================================================================
-   Group calls: voice / video rooms, mesh WebRTC, signalled through Firestore.
+   Aurora group calls
 
-   calls/{callId}                       host, members[], video, status, lastActive
-   calls/{callId}/participants/{uid}    who is in the room right now
-   calls/{callId}/signals/{id}          offers / answers / ICE candidates, addressed to one uid
+   Firestore:
+   calls/{callId}
+   calls/{callId}/participants/{uid}
+   calls/{callId}/signals/{signalId}
 
-   The person who joins LATER always sends the offers, so two people joining at
-   the same moment never collide. Everyone connects directly to everyone else,
-   so keep rooms small (MAX_PARTICIPANTS).
-
-   The UI is an inline bar docked above the messages (#call-bar), not a modal.
+   WebRTC uses a full mesh. The participant who joined later initiates
+   the connection, preventing both participants from offering simultaneously.
    ========================================================================== */
 
 const RTC_CONFIG = {
     iceServers: [
-        { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }
-        // Add a TURN server here for users behind strict NATs:
-        // { urls: 'turn:your.turn.host:3478', username: '...', credential: '...' }
-    ]
+        {
+            urls: [
+                "stun:stun.l.google.com:19302",
+                "stun:stun1.l.google.com:19302"
+            ]
+        },
+        ...(Array.isArray(window.AURORA_TURN_SERVERS)
+            ? window.AURORA_TURN_SERVERS
+            : [])
+    ],
+    bundlePolicy: "max-bundle",
+    rtcpMuxPolicy: "require",
+    iceCandidatePoolSize: 4
 };
 
-const MAX_PARTICIPANTS = 6;      // people in the room at once (mesh gets heavy past this)
-const MAX_MEMBERS = 8;           // people who can be invited to one call
-const RING_TIMEOUT_MS = 40000;   // host gives up if nobody joins
+const MAX_PARTICIPANTS = 6;
+const MAX_MEMBERS = 8;
+const RING_TIMEOUT_MS = 40000;
 const HEARTBEAT_MS = 20000;
-const FRESH_MS = 60000;          // a participant seen within this window is considered present
-const STALE_CALL_MS = 90000;     // ignore calls nobody has touched for this long
+const FRESH_MS = 60000;
+const STALE_CALL_MS = 90000;
 const NOTE_MS = 2500;
 const MAX_PIC_CHARS = 200000;
-const MIC_GAIN = 2.0;            // software boost applied to your microphone
-const SPEAKING_THRESHOLD = 0.02;
+const SPEAKING_THRESHOLD = 0.025;
+const DISCONNECT_GRACE_MS = 7000;
+const MAX_RECOVERY_ATTEMPTS = 3;
 
 const els = {};
+
 let ctx = null;
-let session = null;              // the room this tab is in
-let incoming = null;             // a call ringing for this user
+let session = null;
+let incoming = null;
 let incomingUnsub = null;
 let noteTimer = null;
 let ringTimer = null;
 let audioCtx = null;
+let initialized = false;
+let authUnsubscribe = null;
+
 const dismissed = new Set();
 const originalTitle = document.title;
 
 /* ---------- helpers ---------- */
 
-const me = () => (ctx && ctx.auth.currentUser ? ctx.auth.currentUser.uid : null);
+const me = () => (
+    ctx && ctx.auth.currentUser
+        ? ctx.auth.currentUser.uid
+        : null
+);
 
 function formatDuration(ms) {
     const total = Math.max(0, Math.floor(ms / 1000));
-    const m = String(Math.floor(total / 60)).padStart(2, '0');
-    const s = String(total % 60).padStart(2, '0');
-    return `${m}:${s}`;
+    const minutes = String(Math.floor(total / 60)).padStart(2, "0");
+    const seconds = String(total % 60).padStart(2, "0");
+
+    return `${minutes}:${seconds}`;
 }
 
 function safePic(pic) {
-    return typeof pic === 'string' && pic.length <= MAX_PIC_CHARS ? pic : '';
+    return typeof pic === "string" && pic.length <= MAX_PIC_CHARS
+        ? pic
+        : "";
 }
 
-function serializeCandidate(c) {
+function serializeCandidate(candidate) {
     return {
-        candidate: c.candidate,
-        sdpMid: c.sdpMid ?? null,
-        sdpMLineIndex: c.sdpMLineIndex ?? null,
-        usernameFragment: c.usernameFragment ?? null
+        candidate: candidate.candidate,
+        sdpMid: candidate.sdpMid ?? null,
+        sdpMLineIndex: candidate.sdpMLineIndex ?? null,
+        usernameFragment: candidate.usernameFragment ?? null
     };
 }
 
 function mediaErrorMessage(err) {
     switch (err && err.name) {
-        case 'NotAllowedError':
-            return 'Microphone or camera access was blocked. Allow it in your browser settings and try again.';
-        case 'NotFoundError':
-            return 'No microphone was found on this device.';
-        case 'NotReadableError':
-            return 'Your microphone or camera is being used by another app.';
+        case "NotAllowedError":
+            return "Microphone or camera access was blocked. Allow access in your browser settings and try again.";
+        case "NotFoundError":
+            return "No microphone was found on this device.";
+        case "NotReadableError":
+            return "Your microphone or camera is being used by another app.";
+        case "OverconstrainedError":
+            return "Your microphone or camera does not support the requested settings.";
         default:
-            return 'Could not start the call. Check your microphone and try again.';
+            return "Could not start the call. Check your microphone and try again.";
     }
 }
 
 function getAudioCtx() {
-    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (!audioCtx) {
+        const AudioContextClass =
+            window.AudioContext || window.webkitAudioContext;
+
+        if (!AudioContextClass) {
+            throw new Error("Web Audio is not supported.");
+        }
+
+        audioCtx = new AudioContextClass();
+    }
+
     return audioCtx;
 }
 
 function levelOf(analyser) {
-    const buf = new Uint8Array(analyser.fftSize);
-    analyser.getByteTimeDomainData(buf);
+    if (!analyser) return 0;
+
+    const buffer = new Uint8Array(analyser.fftSize);
+    analyser.getByteTimeDomainData(buffer);
+
     let sum = 0;
-    for (let i = 0; i < buf.length; i++) {
-        const x = (buf[i] - 128) / 128;
-        sum += x * x;
+
+    for (let i = 0; i < buffer.length; i++) {
+        const value = (buffer[i] - 128) / 128;
+        sum += value * value;
     }
-    return Math.sqrt(sum / buf.length);
+
+    return Math.sqrt(sum / buffer.length);
 }
 
-/* ---------- local media (with mic boost) ---------- */
+function timestampOf(value) {
+    return value && typeof value.toMillis === "function"
+        ? value.toMillis()
+        : 0;
+}
+
+function isCurrentSession(s) {
+    return session === s && !s.closing;
+}
+
+/* ---------- local media ---------- */
 
 async function getMedia(video) {
     const audio = {
-        channelCount: 1,
+        channelCount: { ideal: 1 },
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true
     };
-    if (!video) return navigator.mediaDevices.getUserMedia({ audio, video: false });
+
+    if (!video) {
+        return navigator.mediaDevices.getUserMedia({
+            audio,
+            video: false
+        });
+    }
+
     try {
-        return await navigator.mediaDevices.getUserMedia({ audio, video: { facingMode: 'user' } });
-    } catch (err) {
-        if (err && err.name === 'NotAllowedError') throw err;
-        return navigator.mediaDevices.getUserMedia({ audio, video: false }); // no camera
+        return await navigator.mediaDevices.getUserMedia({
+            audio,
+            video: {
+                facingMode: "user"
+            }
+        });
+    } catch (videoError) {
+        // If the camera cannot start, try to preserve the voice call.
+        try {
+            return await navigator.mediaDevices.getUserMedia({
+                audio,
+                video: false
+            });
+        } catch {
+            throw videoError;
+        }
     }
 }
 
 async function buildLocalMedia(video) {
     const raw = await getMedia(video);
-    const media = { raw, send: raw, nodes: [], analyser: null, dest: null };
+
+    const media = {
+        raw,
+        send: raw,
+        nodes: [],
+        analyser: null,
+        silentGain: null
+    };
+
+    if (!raw.getAudioTracks().length) {
+        throw new Error("No microphone audio track was created.");
+    }
 
     try {
         const ac = getAudioCtx();
-        if (ac.state !== 'running') await ac.resume();
-        if (ac.state === 'running' && raw.getAudioTracks().length) {
-            const src = ac.createMediaStreamSource(new MediaStream(raw.getAudioTracks()));
-            const gain = ac.createGain();
-            gain.gain.value = MIC_GAIN;
-            const comp = ac.createDynamicsCompressor();
-            comp.threshold.value = -12;
-            comp.knee.value = 12;
-            comp.ratio.value = 4;
-            const dest = ac.createMediaStreamDestination();
+
+        if (ac.state !== "running") {
+            await ac.resume();
+        }
+
+        if (ac.state === "running") {
+            const audioStream = new MediaStream(raw.getAudioTracks());
+            const source = ac.createMediaStreamSource(audioStream);
             const analyser = ac.createAnalyser();
+            const silentGain = ac.createGain();
+
             analyser.fftSize = 512;
+            analyser.smoothingTimeConstant = 0.65;
 
-            src.connect(gain);
-            gain.connect(comp);
-            comp.connect(dest);
-            comp.connect(analyser);
+            // Analyze the microphone without altering the transmitted audio.
+            // The zero-gain output keeps the analyser graph active silently.
+            silentGain.gain.value = 0;
 
-            media.send = new MediaStream([...dest.stream.getAudioTracks(), ...raw.getVideoTracks()]);
-            media.nodes = [src, gain, comp, dest, analyser];
+            source.connect(analyser);
+            analyser.connect(silentGain);
+            silentGain.connect(ac.destination);
+
             media.analyser = analyser;
-            media.dest = dest;
+            media.silentGain = silentGain;
+            media.nodes = [source, analyser, silentGain];
         }
     } catch (err) {
-        console.warn('Mic boost unavailable, sending the raw microphone:', err);
+        console.warn("Local microphone analysis is unavailable:", err);
     }
+
+    // Send the original microphone and camera tracks.
+    // No software gain, compressor, or extra audio processing is applied.
     return media;
 }
 
 function stopLocalMedia(media) {
-    media.raw.getTracks().forEach((t) => t.stop());
-    if (media.dest) media.dest.stream.getTracks().forEach((t) => t.stop());
-    media.nodes.forEach((n) => { try { n.disconnect(); } catch { /* ignore */ } });
+    if (!media) return;
+
+    media.raw.getTracks().forEach((track) => {
+        try {
+            track.stop();
+        } catch {
+            // Track may already be stopped.
+        }
+    });
+
+    media.nodes.forEach((node) => {
+        try {
+            node.disconnect();
+        } catch {
+            // Node may already be disconnected.
+        }
+    });
+
+    media.nodes = [];
+    media.analyser = null;
+    media.silentGain = null;
 }
 
 /* ---------- ring tone ---------- */
 
 function startRing() {
     stopRing();
+
     const beep = () => {
         try {
             const ac = getAudioCtx();
-            if (ac.state === 'suspended') ac.resume();
-            const t = ac.currentTime;
-            [440, 480].forEach((freq, i) => {
-                const osc = ac.createOscillator();
+
+            if (ac.state === "suspended") {
+                ac.resume().catch(() => {});
+            }
+
+            const start = ac.currentTime;
+
+            [440, 480].forEach((frequency, index) => {
+                const oscillator = ac.createOscillator();
                 const gain = ac.createGain();
-                osc.frequency.value = freq;
-                gain.gain.setValueAtTime(0.0001, t + i * 0.22);
-                gain.gain.exponentialRampToValueAtTime(0.06, t + i * 0.22 + 0.02);
-                gain.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.22 + 0.2);
-                osc.connect(gain).connect(ac.destination);
-                osc.start(t + i * 0.22);
-                osc.stop(t + i * 0.22 + 0.22);
+                const offset = index * 0.22;
+
+                oscillator.frequency.value = frequency;
+
+                gain.gain.setValueAtTime(0.0001, start + offset);
+                gain.gain.exponentialRampToValueAtTime(
+                    0.045,
+                    start + offset + 0.02
+                );
+                gain.gain.exponentialRampToValueAtTime(
+                    0.0001,
+                    start + offset + 0.2
+                );
+
+                oscillator.connect(gain);
+                gain.connect(ac.destination);
+
+                oscillator.start(start + offset);
+                oscillator.stop(start + offset + 0.22);
             });
-        } catch { /* autoplay may be blocked until the user interacts */ }
+        } catch {
+            // Audio playback may require a user interaction.
+        }
     };
+
     beep();
     ringTimer = setInterval(beep, 2200);
-    document.title = 'Incoming call · Aurora';
+    document.title = "Incoming call · Aurora";
 }
 
 function stopRing() {
-    if (ringTimer) clearInterval(ringTimer);
+    if (ringTimer) {
+        clearInterval(ringTimer);
+    }
+
     ringTimer = null;
     document.title = originalTitle;
 }
@@ -195,71 +319,101 @@ function stopRing() {
 /* ---------- inline call bar ---------- */
 
 function cacheElements() {
-    els.bar = document.getElementById('call-bar');
-    els.grid = document.getElementById('call-grid');
-    els.avatar = document.getElementById('call-avatar');
-    els.name = document.getElementById('call-name');
-    els.status = document.getElementById('call-status');
-    els.accept = document.getElementById('call-accept');
-    els.mute = document.getElementById('call-mute');
-    els.camera = document.getElementById('call-camera');
-    els.hangup = document.getElementById('call-hangup');
+    els.bar = document.getElementById("call-bar");
+    els.grid = document.getElementById("call-grid");
+    els.avatar = document.getElementById("call-avatar");
+    els.name = document.getElementById("call-name");
+    els.status = document.getElementById("call-status");
+    els.accept = document.getElementById("call-accept");
+    els.mute = document.getElementById("call-mute");
+    els.camera = document.getElementById("call-camera");
+    els.hangup = document.getElementById("call-hangup");
 }
 
-function setHidden(el, hidden) {
-    if (el) el.classList.toggle('hidden', hidden);
+function setHidden(element, hidden) {
+    if (element) {
+        element.classList.toggle("hidden", hidden);
+    }
 }
 
-function paint({ mode, name, text, pic = '', video = false }) {
+function paint({ mode, name, text, pic = "", video = false }) {
+    if (!els.bar) return;
+
     clearTimeout(noteTimer);
     noteTimer = null;
 
-    els.bar.classList.remove('hidden');
+    els.bar.classList.remove("hidden");
     els.bar.dataset.mode = mode;
     els.bar.dataset.video = String(!!video);
 
-    if (mode !== 'call') ctx.setAvatar(els.avatar, pic);
-    els.name.textContent = name;
-    els.status.textContent = text;
+    if (mode !== "call" && els.avatar) {
+        ctx.setAvatar(els.avatar, pic);
+    }
 
-    const hasCamera = !!(session && session.media && session.media.send.getVideoTracks().length);
-    setHidden(els.avatar, mode === 'call');
-    setHidden(els.grid, mode !== 'call');
-    setHidden(els.accept, mode !== 'incoming');
-    setHidden(els.mute, mode !== 'call');
-    setHidden(els.camera, !(mode === 'call' && hasCamera));
-    setHidden(els.hangup, mode === 'note');
+    if (els.name) els.name.textContent = name || "Call";
+    if (els.status) els.status.textContent = text || "";
 
-    const label = mode === 'incoming' ? 'Decline' : 'Leave call';
-    els.hangup.title = label;
-    els.hangup.setAttribute('aria-label', label);
+    const hasCamera = !!(
+        session &&
+        session.media &&
+        session.media.send.getVideoTracks().length
+    );
+
+    setHidden(els.avatar, mode === "call");
+    setHidden(els.grid, mode !== "call");
+    setHidden(els.accept, mode !== "incoming");
+    setHidden(els.mute, mode !== "call");
+    setHidden(els.camera, !(mode === "call" && hasCamera));
+    setHidden(els.hangup, mode === "note");
+
+    if (els.hangup) {
+        const label = mode === "incoming" ? "Decline" : "Leave call";
+        els.hangup.title = label;
+        els.hangup.setAttribute("aria-label", label);
+    }
 }
 
 function updateHeader(s) {
-    if (session !== s) return;
+    if (!isCurrentSession(s)) return;
+
     const peers = [...s.peers.values()];
+
     const name = peers.length
-        ? peers.map((p) => p.info.displayName || 'Anonymous').join(', ')
-        : (s.label || 'Call');
+        ? peers.map((peer) => peer.info.displayName || "Anonymous").join(", ")
+        : (s.label || "Call");
 
     let text;
-    if (s.startedAt) text = `${formatDuration(Date.now() - s.startedAt)} · ${peers.length + 1} in call`;
-    else if (peers.length) text = 'Connecting…';
-    else text = s.hostUid === me() ? 'Ringing…' : 'Joining…';
 
-    paint({ mode: 'call', name, text, video: s.video });
+    if (s.startedAt) {
+        text = `${formatDuration(Date.now() - s.startedAt)} · ${peers.length + 1} in call`;
+    } else if (peers.length) {
+        text = "Connecting…";
+    } else {
+        text = s.hostUid === me() ? "Ringing…" : "Joining…";
+    }
+
+    paint({
+        mode: "call",
+        name,
+        text,
+        video: s.video
+    });
 }
 
 function renderIncoming() {
     if (!incoming) return;
-    const d = incoming.data;
-    const group = (d.members || []).length > 2;
-    const kind = d.video ? 'video call' : 'voice call';
+
+    const data = incoming.data;
+    const group = (data.members || []).length > 2;
+    const kind = data.video ? "video call" : "voice call";
+
     paint({
-        mode: 'incoming',
-        name: d.hostName || 'Anonymous',
-        text: group ? `Group ${kind} · ${d.members.length} invited` : `Incoming ${kind}`,
-        pic: d.hostPic,
+        mode: "incoming",
+        name: data.hostName || "Anonymous",
+        text: group
+            ? `Group ${kind} · ${data.members.length} invited`
+            : `Incoming ${kind}`,
+        pic: data.hostPic,
         video: false
     });
 }
@@ -267,50 +421,71 @@ function renderIncoming() {
 function hideBar() {
     clearTimeout(noteTimer);
     noteTimer = null;
+
     if (els.bar) {
-        els.bar.classList.add('hidden');
-        els.bar.dataset.mode = '';
+        els.bar.classList.add("hidden");
+        els.bar.dataset.mode = "";
     }
 }
 
 function showNote(label, note) {
-    paint({ mode: 'note', name: label || 'Call', text: note });
+    paint({
+        mode: "note",
+        name: label || "Call",
+        text: note
+    });
+
     noteTimer = setTimeout(() => {
         noteTimer = null;
-        if (!session && !incoming) hideBar();
+
+        if (!session && !incoming) {
+            hideBar();
+        }
     }, NOTE_MS);
 }
 
 /* ---------- participant tiles ---------- */
 
 function addTile(info, isLocal) {
-    const tile = document.createElement('div');
-    tile.className = `call-tile${isLocal ? ' is-local' : ''}`;
+    const tile = document.createElement("div");
+    tile.className = `call-tile${isLocal ? " is-local" : ""}`;
 
-    const video = document.createElement('video');
+    const video = document.createElement("video");
     video.autoplay = true;
     video.playsInline = true;
-    video.muted = true; // sound comes from the separate <audio> element
+    video.muted = true;
 
-    const avatar = document.createElement('img');
-    avatar.className = 'call-tile-avatar';
-    avatar.alt = '';
+    const avatar = document.createElement("img");
+    avatar.className = "call-tile-avatar";
+    avatar.alt = "";
+
     ctx.setAvatar(avatar, info.profilePic);
 
-    const name = document.createElement('span');
-    name.className = 'call-tile-name';
-    name.textContent = isLocal ? 'You' : (info.displayName || 'Anonymous');
+    const name = document.createElement("span");
+    name.className = "call-tile-name";
+    name.textContent = isLocal
+        ? "You"
+        : (info.displayName || "Anonymous");
 
-    const state = document.createElement('span');
-    state.className = 'call-tile-state';
+    const state = document.createElement("span");
+    state.className = "call-tile-state";
 
     tile.append(video, avatar, name, state);
     els.grid.appendChild(tile);
-    return { tile, video, avatar, name, state };
+
+    return {
+        tile,
+        video,
+        avatar,
+        name,
+        state
+    };
 }
 
 function setTileState(ui, text) {
-    ui.state.textContent = text || '';
+    if (ui && ui.state) {
+        ui.state.textContent = text || "";
+    }
 }
 
 /* ---------- session ---------- */
@@ -318,13 +493,13 @@ function setTileState(ui, text) {
 function newSession(id, data, label) {
     return {
         id,
-        callRef: doc(ctx.db, 'calls', id),
+        callRef: doc(ctx.db, "calls", id),
         meRef: null,
         hostUid: data.hostUid,
         hostName: data.hostName,
         video: !!data.video,
         members: data.members || [],
-        label: label || data.hostName || 'Call',
+        label: label || data.hostName || "Call",
         participants: new Map(),
         peers: new Map(),
         media: null,
@@ -333,25 +508,33 @@ function newSession(id, data, label) {
         created: false,
         joinedAt: 0,
         startedAt: 0,
+        closing: false,
         unsubs: [],
         heartbeat: null,
         levelTimer: null,
         durationTimer: null,
-        aloneTimeout: null
+        aloneTimeout: null,
+        signalQueue: Promise.resolve(),
+        processedSignals: new Set()
     };
 }
 
 async function runSession(s, createData) {
     const user = ctx.auth.currentUser;
-    if (!user || session) return;
 
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.RTCPeerConnection) {
-        alert('Calling is not supported in this browser.');
+    if (!user || session || incoming && createData) return;
+
+    if (
+        !navigator.mediaDevices ||
+        !navigator.mediaDevices.getUserMedia ||
+        !window.RTCPeerConnection
+    ) {
+        alert("Calling is not supported in this browser.");
         return;
     }
 
     session = s;
-    document.body.classList.add('in-call');
+    document.body.classList.add("in-call");
     updateHeader(s);
 
     try {
@@ -363,59 +546,89 @@ async function runSession(s, createData) {
         }
         return;
     }
-    if (session !== s) {
+
+    if (!isCurrentSession(s)) {
         stopLocalMedia(s.media);
+        s.media = null;
         return;
     }
+
     updateHeader(s);
 
     try {
-        // Host creates the call only once the microphone is ready
         if (createData) {
             await setDoc(s.callRef, createData);
             s.created = true;
-            if (session !== s) {
-                updateDoc(s.callRef, { status: 'ended', endedAt: serverTimestamp() }).catch(() => {});
+
+            if (!isCurrentSession(s)) {
+                await updateDoc(s.callRef, {
+                    status: "ended",
+                    endedAt: serverTimestamp()
+                }).catch(() => {});
                 return;
             }
         }
 
-        const partsRef = collection(s.callRef, 'participants');
+        const partsRef = collection(s.callRef, "participants");
         const existing = await getDocs(partsRef);
-        const present = existing.docs.filter((d) => {
-            if (d.id === user.uid) return false;
-            const seen = d.data().lastSeen && d.data().lastSeen.toMillis ? d.data().lastSeen.toMillis() : 0;
-            return Date.now() - seen < FRESH_MS * 2;
+
+        const present = existing.docs.filter((participant) => {
+            if (participant.id === user.uid) return false;
+
+            const seen = timestampOf(participant.data().lastSeen);
+            return seen > 0 && Date.now() - seen < FRESH_MS * 2;
         });
+
         if (present.length >= MAX_PARTICIPANTS) {
-            teardownSession(s, 'Call is full');
+            teardownSession(s, "Call is full");
+            if (s.created) {
+                await updateDoc(s.callRef, {
+                    status: "ended",
+                    endedAt: serverTimestamp()
+                }).catch(() => {});
+            }
             return;
         }
 
         s.meRef = doc(partsRef, user.uid);
+
         const profile = ctx.getProfile();
+
         await setDoc(s.meRef, {
             uid: user.uid,
-            displayName: profile.displayName,
+            displayName: profile.displayName || "Anonymous",
             profilePic: safePic(profile.profilePic),
             joinedAt: serverTimestamp(),
             lastSeen: serverTimestamp()
         });
+
         s.joined = true;
 
-        if (session !== s) {
-            deleteDoc(s.meRef).catch(() => {});
+        if (!isCurrentSession(s)) {
+            await deleteDoc(s.meRef).catch(() => {});
             return;
         }
 
         const meSnap = await getDoc(s.meRef);
-        s.joinedAt = meSnap.data({ serverTimestamps: 'estimate' }).joinedAt.toMillis();
+        const meData = meSnap.data({
+            serverTimestamps: "estimate"
+        });
 
-        s.localUi = addTile({ profilePic: profile.profilePic }, true);
-        const camTracks = s.media.raw.getVideoTracks();
-        if (camTracks.length) {
-            s.localUi.video.srcObject = new MediaStream(camTracks);
-            s.localUi.tile.classList.add('has-video');
+        s.joinedAt = timestampOf(meData && meData.joinedAt);
+
+        if (!s.joinedAt) {
+            s.joinedAt = Date.now();
+        }
+
+        s.localUi = addTile({
+            profilePic: profile.profilePic
+        }, true);
+
+        const cameraTracks = s.media.send.getVideoTracks();
+
+        if (cameraTracks.length) {
+            s.localUi.video.srcObject = new MediaStream(cameraTracks);
+            s.localUi.tile.classList.add("has-video");
         }
 
         watchSignals(s);
@@ -423,106 +636,209 @@ async function runSession(s, createData) {
         watchCallDoc(s);
 
         s.heartbeat = setInterval(() => {
-            updateDoc(s.meRef, { lastSeen: serverTimestamp() }).catch(() => {});
-            updateDoc(s.callRef, { lastActive: serverTimestamp() }).catch(() => {});
+            if (!isCurrentSession(s) || !s.meRef) return;
+
+            updateDoc(s.meRef, {
+                lastSeen: serverTimestamp()
+            }).catch(() => {});
+
+            updateDoc(s.callRef, {
+                lastActive: serverTimestamp()
+            }).catch(() => {});
         }, HEARTBEAT_MS);
 
         s.levelTimer = setInterval(() => tickLevels(s), 150);
 
         if (s.hostUid === user.uid) {
             s.aloneTimeout = setTimeout(() => {
-                if (session === s && s.peers.size === 0) leaveCall('No answer');
+                if (isCurrentSession(s) && s.peers.size === 0) {
+                    leaveCall("No answer");
+                }
             }, RING_TIMEOUT_MS);
         }
 
         updateHeader(s);
     } catch (err) {
-        console.error('Error joining call:', err);
+        console.error("Error joining call:", err);
+
         if (session === s) {
             const wasJoined = s.joined;
-            teardownSession(s, 'Could not join call');
-            if (wasJoined && s.meRef) deleteDoc(s.meRef).catch(() => {});
-            if (s.created) updateDoc(s.callRef, { status: 'ended', endedAt: serverTimestamp() }).catch(() => {});
+            const participantRef = s.meRef;
+            const callWasCreated = s.created;
+
+            teardownSession(s, "Could not join call");
+
+            if (wasJoined && participantRef) {
+                await deleteDoc(participantRef).catch(() => {});
+            }
+
+            if (callWasCreated) {
+                await updateDoc(s.callRef, {
+                    status: "ended",
+                    endedAt: serverTimestamp()
+                }).catch(() => {});
+            }
         }
     }
 }
 
 function tickLevels(s) {
-    if (session !== s) return;
+    if (!isCurrentSession(s)) return;
+
     if (s.media && s.media.analyser && s.localUi) {
-        const on = s.media.send.getAudioTracks().some((t) => t.enabled);
-        s.localUi.tile.classList.toggle('speaking', on && levelOf(s.media.analyser) > SPEAKING_THRESHOLD);
+        const tracks = s.media.send.getAudioTracks();
+        const enabled = tracks.some((track) => track.enabled);
+
+        s.localUi.tile.classList.toggle(
+            "speaking",
+            enabled && levelOf(s.media.analyser) > SPEAKING_THRESHOLD
+        );
     }
-    s.peers.forEach((p) => {
-        if (p.analyser) p.ui.tile.classList.toggle('speaking', levelOf(p.analyser) > SPEAKING_THRESHOLD);
+
+    s.peers.forEach((peer) => {
+        if (peer.analyser) {
+            peer.ui.tile.classList.toggle(
+                "speaking",
+                levelOf(peer.analyser) > SPEAKING_THRESHOLD
+            );
+        }
     });
 }
 
 function teardownSession(s, note) {
-    if (session === s) session = null;
+    if (!s || s.closing) return;
+
+    s.closing = true;
+
+    if (session === s) {
+        session = null;
+    }
 
     clearInterval(s.heartbeat);
     clearInterval(s.levelTimer);
     clearInterval(s.durationTimer);
     clearTimeout(s.aloneTimeout);
-    s.unsubs.forEach((u) => { try { u(); } catch { /* ignore */ } });
+
+    s.unsubs.forEach((unsubscribe) => {
+        try {
+            unsubscribe();
+        } catch {
+            // Listener may already be removed.
+        }
+    });
+
     s.unsubs = [];
 
-    s.peers.forEach((p) => closePeer(p));
+    s.peers.forEach((peer) => closePeer(peer));
     s.peers.clear();
-    if (s.media) stopLocalMedia(s.media);
 
-    els.grid.innerHTML = '';
-    document.body.classList.remove('in-call');
-    els.mute.setAttribute('aria-pressed', 'false');
-    els.camera.setAttribute('aria-pressed', 'false');
-    els.mute.firstElementChild.className = 'fa-solid fa-microphone';
-    els.camera.firstElementChild.className = 'fa-solid fa-video';
+    if (s.media) {
+        stopLocalMedia(s.media);
+        s.media = null;
+    }
+
+    if (els.grid) els.grid.innerHTML = "";
+
+    document.body.classList.remove("in-call");
+
+    if (els.mute) {
+        els.mute.setAttribute("aria-pressed", "false");
+
+        if (els.mute.firstElementChild) {
+            els.mute.firstElementChild.className = "fa-solid fa-microphone";
+        }
+    }
+
+    if (els.camera) {
+        els.camera.setAttribute("aria-pressed", "false");
+
+        if (els.camera.firstElementChild) {
+            els.camera.firstElementChild.className = "fa-solid fa-video";
+        }
+    }
 
     if (incoming) {
         renderIncoming();
         return;
     }
-    if (note) showNote(s.label, note);
-    else hideBar();
+
+    if (note) {
+        showNote(s.label, note);
+    } else {
+        hideBar();
+    }
 }
 
-export async function leaveCall(note = 'Call ended') {
+export async function leaveCall(note = "Call ended") {
     const s = session;
-    if (!s) return;
-    const joined = s.joined;
-    const created = s.created;
-    teardownSession(s, note);
 
-    if (!joined) {
-        if (created) updateDoc(s.callRef, { status: 'ended', endedAt: serverTimestamp() }).catch(() => {});
-        return;
+    if (!s || s.closing) return;
+
+    const wasJoined = s.joined;
+    const wasCreated = s.created;
+    const participantRef = s.meRef;
+
+    // Keep the participant document until we have checked whether the call
+    // needs to be ended. The Firestore rules authorize this update while
+    // the caller is still a participant.
+    if (wasJoined && participantRef) {
+        try {
+            const snapshot = await getDocs(
+                collection(s.callRef, "participants")
+            );
+
+            const others = snapshot.docs.filter(
+                (participant) => participant.id !== me()
+            );
+
+            if (others.length === 0) {
+                await updateDoc(s.callRef, {
+                    status: "ended",
+                    endedAt: serverTimestamp()
+                });
+            }
+        } catch (err) {
+            console.warn("Could not check remaining call participants:", err);
+        }
+    } else if (wasCreated) {
+        await updateDoc(s.callRef, {
+            status: "ended",
+            endedAt: serverTimestamp()
+        }).catch(() => {});
     }
 
-    try {
-        const snap = await getDocs(collection(s.callRef, 'participants'));
-        const others = snap.docs.filter((d) => d.id !== me());
-        // Still a participant here, so this write is allowed
-        if (others.length === 0) {
-            await updateDoc(s.callRef, { status: 'ended', endedAt: serverTimestamp() });
-        }
-    } catch { /* someone else may have ended it first */ }
+    teardownSession(s, note);
 
-    try { await deleteDoc(s.meRef); } catch { /* ignore */ }
+    if (wasJoined && participantRef) {
+        await deleteDoc(participantRef).catch(() => {});
+    }
 }
 
 export function endActiveCall() {
     if (incoming) declineIncoming();
-    return leaveCall('Call ended');
+    return leaveCall("Call ended");
 }
 
-/* ---------- peers ---------- */
+/* ---------- peer connections ---------- */
 
 function ensurePeer(s, uid, info) {
     let peer = s.peers.get(uid);
-    if (peer) return peer;
 
-    const safeInfo = info || s.participants.get(uid) || { displayName: 'Participant' };
+    if (peer) {
+        if (info) {
+            peer.info = info;
+            peer.ui.name.textContent = info.displayName || "Anonymous";
+            ctx.setAvatar(peer.ui.avatar, info.profilePic);
+        }
+
+        return peer;
+    }
+
+    const safeInfo = info || s.participants.get(uid) || {
+        displayName: "Participant",
+        profilePic: ""
+    };
+
     peer = {
         uid,
         info: safeInfo,
@@ -532,121 +848,306 @@ function ensurePeer(s, uid, info) {
         pendingIn: [],
         analyser: null,
         dropTimeout: null,
+        recoveryTimer: null,
+        recoveryAttempts: 0,
+        isOfferer: false,
         ui: addTile(safeInfo, false),
-        audio: document.createElement('audio')
+        audio: document.createElement("audio")
     };
+
     peer.audio.autoplay = true;
+    peer.audio.playsInline = true;
     peer.ui.tile.appendChild(peer.audio);
-    setTileState(peer.ui, 'Connecting…');
+
+    setTileState(peer.ui, "Connecting…");
+
     s.peers.set(uid, peer);
     updateHeader(s);
+
     return peer;
 }
 
-function resetPeerConnection(peer) {
+function resetPeerConnection(peer, preserveCandidates = false) {
     clearTimeout(peer.dropTimeout);
+    clearTimeout(peer.recoveryTimer);
+
+    peer.dropTimeout = null;
+    peer.recoveryTimer = null;
+
+    const pending = preserveCandidates ? peer.pendingIn.slice() : [];
+
     if (peer.pc) {
         peer.pc.onicecandidate = null;
         peer.pc.ontrack = null;
         peer.pc.onconnectionstatechange = null;
-        try { peer.pc.close(); } catch { /* ignore */ }
+        peer.pc.oniceconnectionstatechange = null;
+
+        try {
+            peer.pc.close();
+        } catch {
+            // Connection may already be closed.
+        }
     }
+
     peer.pc = null;
     peer.remoteSet = false;
-    peer.pendingIn = [];
+    peer.pendingIn = pending;
     peer.analyser = null;
+    peer.remoteStream = null;
 }
 
 function closePeer(peer) {
     resetPeerConnection(peer);
+
     peer.audio.srcObject = null;
     peer.ui.video.srcObject = null;
+
     peer.ui.tile.remove();
 }
 
 function removePeer(s, uid) {
     const peer = s.peers.get(uid);
+
     if (!peer) return;
+
     closePeer(peer);
     s.peers.delete(uid);
+
     updateHeader(s);
 }
 
-function markConnected(s) {
-    clearTimeout(s.aloneTimeout);
-    if (s.startedAt) return;
-    s.startedAt = Date.now();
-    s.durationTimer = setInterval(() => updateHeader(s), 1000);
+function markConnected(s, peer) {
+    clearTimeout(peer.dropTimeout);
+    clearTimeout(peer.recoveryTimer);
+
+    peer.dropTimeout = null;
+    peer.recoveryTimer = null;
+    peer.recoveryAttempts = 0;
+
+    setTileState(peer.ui, "");
+
+    if (!s.startedAt) {
+        s.startedAt = Date.now();
+
+        s.durationTimer = setInterval(() => {
+            updateHeader(s);
+        }, 1000);
+    }
+
     updateHeader(s);
 }
 
-function buildPc(s, peer) {
-    resetPeerConnection(peer);
+function buildPc(s, peer, preserveCandidates = false) {
+    resetPeerConnection(peer, preserveCandidates);
+
     const pc = new RTCPeerConnection(RTC_CONFIG);
+
     peer.pc = pc;
     peer.remoteStream = new MediaStream();
 
-    s.media.send.getTracks().forEach((track) => pc.addTrack(track, s.media.send));
+    s.media.send.getTracks().forEach((track) => {
+        pc.addTrack(track, s.media.send);
+    });
 
     pc.ontrack = (event) => {
-        const tracks = event.streams[0] ? event.streams[0].getTracks() : [event.track];
-        tracks.forEach((track) => {
-            if (!peer.remoteStream.getTracks().includes(track)) peer.remoteStream.addTrack(track);
+        if (!isCurrentSession(s) || peer.pc !== pc) return;
 
-            if (track.kind === 'audio' && !peer.analyser) {
-                try {
-                    const ac = getAudioCtx();
-                    const analyser = ac.createAnalyser();
-                    analyser.fftSize = 512;
-                    ac.createMediaStreamSource(peer.remoteStream).connect(analyser);
-                    peer.analyser = analyser;
-                } catch { /* speaking indicator is optional */ }
+        const tracks = event.streams[0]
+            ? event.streams[0].getTracks()
+            : [event.track];
+
+        tracks.forEach((track) => {
+            const alreadyAdded = peer.remoteStream
+                .getTracks()
+                .some((existingTrack) => existingTrack.id === track.id);
+
+            if (!alreadyAdded) {
+                peer.remoteStream.addTrack(track);
             }
         });
 
-        peer.audio.srcObject = peer.remoteStream;
+        if (
+            peer.remoteStream.getAudioTracks().length &&
+            !peer.analyser
+        ) {
+            try {
+                const ac = getAudioCtx();
+                const source = ac.createMediaStreamSource(peer.remoteStream);
+                const analyser = ac.createAnalyser();
+
+                analyser.fftSize = 512;
+                analyser.smoothingTimeConstant = 0.65;
+
+                const silentGain = ac.createGain();
+                silentGain.gain.value = 0;
+
+                source.connect(analyser);
+                analyser.connect(silentGain);
+                silentGain.connect(ac.destination);
+
+                peer.analyser = analyser;
+
+                peer.audioAnalysisNodes = [source, analyser, silentGain];
+            } catch {
+                // Remote speaking detection is optional.
+            }
+        }
+
+        if (peer.audio.srcObject !== peer.remoteStream) {
+            peer.audio.srcObject = peer.remoteStream;
+        }
+
         peer.audio.play().catch(() => {});
+
         if (peer.remoteStream.getVideoTracks().length) {
             peer.ui.video.srcObject = peer.remoteStream;
             peer.ui.video.play().catch(() => {});
-            peer.ui.tile.classList.add('has-video');
+            peer.ui.tile.classList.add("has-video");
+        } else {
+            peer.ui.video.srcObject = null;
+            peer.ui.tile.classList.remove("has-video");
         }
     };
 
     pc.onicecandidate = (event) => {
-        if (event.candidate) sendSignal(s, peer.uid, 'candidate', serializeCandidate(event.candidate));
+        if (
+            event.candidate &&
+            isCurrentSession(s) &&
+            peer.pc === pc
+        ) {
+            sendSignal(
+                s,
+                peer.uid,
+                "candidate",
+                serializeCandidate(event.candidate)
+            );
+        }
     };
 
     pc.onconnectionstatechange = () => {
-        if (session !== s || peer.pc !== pc) return;
-        const st = pc.connectionState;
-        if (st === 'connected') {
+        if (!isCurrentSession(s) || peer.pc !== pc) return;
+
+        const state = pc.connectionState;
+
+        if (state === "connected") {
+            markConnected(s, peer);
+        } else if (state === "connecting") {
+            setTileState(peer.ui, "Connecting…");
+        } else if (state === "disconnected") {
+            setTileState(peer.ui, "Reconnecting…");
+
             clearTimeout(peer.dropTimeout);
-            setTileState(peer.ui, '');
-            markConnected(s);
-        } else if (st === 'connecting') {
-            setTileState(peer.ui, 'Connecting…');
-        } else if (st === 'disconnected') {
-            setTileState(peer.ui, 'Reconnecting…');
-            clearTimeout(peer.dropTimeout);
+
             peer.dropTimeout = setTimeout(() => {
-                if (session === s && peer.pc === pc && pc.connectionState !== 'connected') {
-                    setTileState(peer.ui, 'Connection lost');
+                if (
+                    isCurrentSession(s) &&
+                    peer.pc === pc &&
+                    pc.connectionState !== "connected"
+                ) {
+                    if (peer.isOfferer) {
+                        scheduleRecovery(s, peer, 0);
+                    } else {
+                        setTileState(peer.ui, "Waiting for connection…");
+                    }
                 }
-            }, 8000);
-        } else if (st === 'failed') {
-            setTileState(peer.ui, 'Connection failed');
+            }, DISCONNECT_GRACE_MS);
+        } else if (state === "failed") {
+            if (peer.isOfferer) {
+                setTileState(peer.ui, "Reconnecting…");
+                scheduleRecovery(s, peer, 0);
+            } else {
+                setTileState(peer.ui, "Connection failed");
+            }
+        } else if (state === "closed") {
+            setTileState(peer.ui, "Disconnected");
+        }
+    };
+
+    pc.oniceconnectionstatechange = () => {
+        if (!isCurrentSession(s) || peer.pc !== pc) return;
+
+        if (pc.iceConnectionState === "failed" && peer.isOfferer) {
+            scheduleRecovery(s, peer, 0);
         }
     };
 
     return pc;
 }
 
-/* ---------- signalling ---------- */
+/* ---------- connection recovery ---------- */
+
+function scheduleRecovery(s, peer, delay = 1000) {
+    if (!isCurrentSession(s) || !peer.isOfferer) return;
+    if (!peer.pc || peer.recoveryTimer) return;
+
+    if (peer.recoveryAttempts >= MAX_RECOVERY_ATTEMPTS) {
+        setTileState(peer.ui, "Connection failed");
+        return;
+    }
+
+    peer.recoveryTimer = setTimeout(() => {
+        peer.recoveryTimer = null;
+
+        restartPeerConnection(s, peer).catch((err) => {
+            console.warn("Connection recovery failed:", err);
+
+            if (isCurrentSession(s)) {
+                scheduleRecovery(s, peer, 2000);
+            }
+        });
+    }, delay);
+}
+
+async function restartPeerConnection(s, peer) {
+    if (!isCurrentSession(s) || !peer.isOfferer) return;
+
+    const pc = peer.pc;
+
+    if (!pc || pc.connectionState === "connected") return;
+
+    if (pc.signalingState !== "stable") {
+        scheduleRecovery(s, peer, 1000);
+        return;
+    }
+
+    peer.recoveryAttempts += 1;
+
+    try {
+        setTileState(peer.ui, "Reconnecting…");
+
+        if (typeof pc.restartIce === "function") {
+            pc.restartIce();
+        }
+
+        const offer = await pc.createOffer({
+            iceRestart: true
+        });
+
+        if (!isCurrentSession(s) || peer.pc !== pc) return;
+
+        await pc.setLocalDescription(offer);
+
+        if (!isCurrentSession(s) || peer.pc !== pc) return;
+
+        await sendSignal(s, peer.uid, "offer", {
+            type: pc.localDescription.type,
+            sdp: pc.localDescription.sdp
+        });
+
+        scheduleRecovery(s, peer, 8000);
+    } catch (err) {
+        console.warn("Could not restart the peer connection:", err);
+        scheduleRecovery(s, peer, 2000);
+    }
+}
+
+/* ---------- signaling ---------- */
 
 async function sendSignal(s, to, kind, payload) {
+    if (!isCurrentSession(s) || !to || to === me()) return;
+
     try {
-        await addDoc(collection(s.callRef, 'signals'), {
+        await addDoc(collection(s.callRef, "signals"), {
             from: me(),
             to,
             kind,
@@ -658,185 +1159,359 @@ async function sendSignal(s, to, kind, payload) {
     }
 }
 
-async function offerTo(s, peer) {
-    const pc = buildPc(s, peer);
+async function offerTo(s, peer, iceRestart = false) {
+    if (!isCurrentSession(s)) return;
+
+    // Only the participant who joined later initiates offers.
+    if (!peer.isOfferer) return;
+
+    let pc = peer.pc;
+
+    if (!pc) {
+        pc = buildPc(s, peer);
+    }
+
     try {
-        const offer = await pc.createOffer();
+        if (pc.signalingState !== "stable") {
+            return;
+        }
+
+        const offer = await pc.createOffer(
+            iceRestart ? { iceRestart: true } : undefined
+        );
+
         await pc.setLocalDescription(offer);
-        if (session !== s || peer.pc !== pc) return;
-        await sendSignal(s, peer.uid, 'offer', { type: offer.type, sdp: offer.sdp });
+
+        if (!isCurrentSession(s) || peer.pc !== pc) return;
+
+        await sendSignal(s, peer.uid, "offer", {
+            type: pc.localDescription.type,
+            sdp: pc.localDescription.sdp
+        });
     } catch (err) {
-        console.error('Error creating offer:', err);
-        setTileState(peer.ui, 'Connection failed');
+        console.error("Error creating offer:", err);
+        setTileState(peer.ui, "Connection failed");
     }
 }
 
 function addRemoteCandidate(peer, data) {
-    const init = {
+    if (!data || typeof data.candidate !== "string") return;
+
+    const candidate = {
         candidate: data.candidate,
-        sdpMid: data.sdpMid,
-        sdpMLineIndex: data.sdpMLineIndex,
-        usernameFragment: data.usernameFragment
+        sdpMid: data.sdpMid ?? null,
+        sdpMLineIndex: data.sdpMLineIndex ?? null,
+        usernameFragment: data.usernameFragment ?? null
     };
+
     if (!peer.pc || !peer.remoteSet) {
-        peer.pendingIn.push(init);
+        peer.pendingIn.push(candidate);
         return;
     }
-    peer.pc.addIceCandidate(init).catch((err) => console.warn('addIceCandidate failed:', err));
-}
 
-function flushCandidates(peer) {
-    peer.pendingIn.splice(0).forEach((init) => {
-        peer.pc.addIceCandidate(init).catch((err) => console.warn('addIceCandidate failed:', err));
+    peer.pc.addIceCandidate(candidate).catch((err) => {
+        console.warn("Could not apply an ICE candidate:", err);
     });
 }
 
-async function handleSignal(s, snap) {
-    const sig = snap.data();
-    deleteDoc(snap.ref).catch(() => {});
+function flushCandidates(peer) {
+    if (!peer.pc || !peer.remoteSet) return;
 
-    const created = sig.createdAt && sig.createdAt.toMillis ? sig.createdAt.toMillis() : Date.now();
-    if (created < s.joinedAt - 1000) return;   // left over from an earlier session
-    if (sig.from === me()) return;
+    const pc = peer.pc;
+    const pending = peer.pendingIn.splice(0);
+
+    pending.forEach((candidate) => {
+        pc.addIceCandidate(candidate).catch((err) => {
+            console.warn("Could not apply a queued ICE candidate:", err);
+        });
+    });
+}
+
+async function handleSignal(s, snapshot) {
+    if (!isCurrentSession(s)) return;
+
+    const signal = snapshot.data();
+
+    // Ignore messages from an earlier session and signals addressed elsewhere.
+    const createdAt = timestampOf(signal.createdAt);
+
+    if (
+        createdAt &&
+        s.joinedAt &&
+        createdAt < s.joinedAt - 1000
+    ) {
+        await deleteDoc(snapshot.ref).catch(() => {});
+        return;
+    }
+
+    if (signal.from === me() || signal.to !== me()) {
+        await deleteDoc(snapshot.ref).catch(() => {});
+        return;
+    }
+
+    if (!["offer", "answer", "candidate"].includes(signal.kind)) {
+        await deleteDoc(snapshot.ref).catch(() => {});
+        return;
+    }
 
     try {
-        if (sig.kind === 'offer') {
-            const peer = ensurePeer(s, sig.from, s.participants.get(sig.from));
-            const pendingCandidates = peer.pendingIn.slice(); // candidates that raced ahead of the offer
-            const pc = buildPc(s, peer);
-            peer.pendingIn = pendingCandidates;
-            await pc.setRemoteDescription({ type: sig.payload.type, sdp: sig.payload.sdp });
+        if (signal.kind === "offer") {
+            const info = s.participants.get(signal.from);
+            const peer = ensurePeer(s, signal.from, info);
+
+            // An offer from the other side means this side must answer.
+            peer.isOfferer = false;
+
+            const pc = buildPc(s, peer, true);
+
+            await pc.setRemoteDescription({
+                type: signal.payload.type,
+                sdp: signal.payload.sdp
+            });
+
+            if (!isCurrentSession(s) || peer.pc !== pc) return;
+
             peer.remoteSet = true;
             flushCandidates(peer);
+
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
-            if (session !== s || peer.pc !== pc) return;
-            await sendSignal(s, sig.from, 'answer', { type: answer.type, sdp: answer.sdp });
-        } else if (sig.kind === 'answer') {
-            const peer = s.peers.get(sig.from);
-            if (!peer || !peer.pc || peer.remoteSet) return;
-            await peer.pc.setRemoteDescription({ type: sig.payload.type, sdp: sig.payload.sdp });
+
+            if (!isCurrentSession(s) || peer.pc !== pc) return;
+
+            await sendSignal(s, signal.from, "answer", {
+                type: pc.localDescription.type,
+                sdp: pc.localDescription.sdp
+            });
+        } else if (signal.kind === "answer") {
+            const peer = s.peers.get(signal.from);
+            const pc = peer && peer.pc;
+
+            if (!peer || !pc) return;
+
+            // Answers apply only to an outstanding local offer. This also
+            // permits answers to ICE restart offers.
+            if (pc.signalingState !== "have-local-offer") return;
+
+            await pc.setRemoteDescription({
+                type: signal.payload.type,
+                sdp: signal.payload.sdp
+            });
+
+            if (!isCurrentSession(s) || peer.pc !== pc) return;
+
             peer.remoteSet = true;
             flushCandidates(peer);
-        } else if (sig.kind === 'candidate') {
-            const peer = ensurePeer(s, sig.from, s.participants.get(sig.from));
-            addRemoteCandidate(peer, sig.payload);
+        } else if (signal.kind === "candidate") {
+            const peer = ensurePeer(
+                s,
+                signal.from,
+                s.participants.get(signal.from)
+            );
+
+            addRemoteCandidate(peer, signal.payload);
         }
     } catch (err) {
-        console.error(`Error handling ${sig.kind}:`, err);
+        console.error(`Error handling ${signal.kind}:`, err);
+    } finally {
+        await deleteDoc(snapshot.ref).catch(() => {});
     }
 }
 
 function watchSignals(s) {
-    const q = query(collection(s.callRef, 'signals'), where('to', '==', me()));
-    s.unsubs.push(onSnapshot(q, (snap) => {
-        if (session !== s) return;
-        snap.docChanges().forEach((change) => {
-            if (change.type === 'added') handleSignal(s, change.doc);
-        });
-    }, (err) => console.error('Signal listener error:', err)));
+    const signalsQuery = query(
+        collection(s.callRef, "signals"),
+        where("to", "==", me())
+    );
+
+    s.unsubs.push(
+        onSnapshot(
+            signalsQuery,
+            (snapshot) => {
+                if (!isCurrentSession(s)) return;
+
+                snapshot.docChanges().forEach((change) => {
+                    if (change.type !== "added") return;
+
+                    const signalId = change.doc.id;
+
+                    if (s.processedSignals.has(signalId)) return;
+
+                    s.processedSignals.add(signalId);
+
+                    // Serialize signaling to prevent overlapping offers,
+                    // answers, and candidate processing.
+                    s.signalQueue = s.signalQueue
+                        .then(() => handleSignal(s, change.doc))
+                        .catch((err) => {
+                            console.error("Signal queue error:", err);
+                        });
+                });
+            },
+            (err) => console.error("Signal listener error:", err)
+        )
+    );
 }
 
 function watchParticipants(s) {
-    s.unsubs.push(onSnapshot(collection(s.callRef, 'participants'), (snap) => {
-        if (session !== s) return;
+    s.unsubs.push(
+        onSnapshot(
+            collection(s.callRef, "participants"),
+            (snapshot) => {
+                if (!isCurrentSession(s)) return;
 
-        snap.docChanges().forEach((change) => {
-            const uid = change.doc.id;
-            if (uid === me()) return;
-            const d = change.doc.data({ serverTimestamps: 'estimate' });
+                snapshot.docChanges().forEach((change) => {
+                    const uid = change.doc.id;
 
-            if (change.type === 'removed') {
-                s.participants.delete(uid);
-                removePeer(s, uid);
-                return;
-            }
+                    if (uid === me()) return;
 
-            s.participants.set(uid, d);
-            const existing = s.peers.get(uid);
-            if (existing) {
-                existing.info = d;
-                existing.ui.name.textContent = d.displayName || 'Anonymous';
-                ctx.setAvatar(existing.ui.avatar, d.profilePic);
-            }
-            if (change.type !== 'added' || existing) return;
+                    if (change.type === "removed") {
+                        s.participants.delete(uid);
+                        removePeer(s, uid);
+                        return;
+                    }
 
-            const theirs = d.joinedAt && d.joinedAt.toMillis ? d.joinedAt.toMillis() : null;
-            if (theirs === null) return;
+                    const data = change.doc.data({
+                        serverTimestamps: "estimate"
+                    });
 
-            // Whoever joined later is the one who makes the offer
-            const theyAreEarlier = theirs < s.joinedAt || (theirs === s.joinedAt && uid < me());
-            if (theyAreEarlier) {
-                const seen = d.lastSeen && d.lastSeen.toMillis ? d.lastSeen.toMillis() : 0;
-                if (seen < s.joinedAt - FRESH_MS) return; // left behind by a crashed tab
-                offerTo(s, ensurePeer(s, uid, d));
-            } else {
-                ensurePeer(s, uid, d); // they will send us an offer
-            }
-        });
+                    s.participants.set(uid, data);
 
-        updateHeader(s);
-    }, (err) => console.error('Participant listener error:', err)));
+                    const joinedAt = timestampOf(data.joinedAt);
+
+                    if (!joinedAt || !s.joinedAt) return;
+
+                    // The later joiner offers. UID breaks timestamp ties.
+                    const peerJoinedEarlier =
+                        joinedAt < s.joinedAt ||
+                        (joinedAt === s.joinedAt && uid < me());
+
+                    let peer = s.peers.get(uid);
+
+                    if (peer) {
+                        peer.info = data;
+                        peer.ui.name.textContent =
+                            data.displayName || "Anonymous";
+
+                        ctx.setAvatar(peer.ui.avatar, data.profilePic);
+                    } else {
+                        peer = ensurePeer(s, uid, data);
+                    }
+
+                    peer.isOfferer = peerJoinedEarlier;
+
+                    if (change.type !== "added") return;
+
+                    if (peerJoinedEarlier && !peer.pc) {
+                        const lastSeen = timestampOf(data.lastSeen);
+
+                        if (
+                            lastSeen &&
+                            Date.now() - lastSeen > FRESH_MS * 2
+                        ) {
+                            return;
+                        }
+
+                        offerTo(s, peer);
+                    }
+                });
+
+                updateHeader(s);
+            },
+            (err) => console.error("Participant listener error:", err)
+        )
+    );
 }
 
 function watchCallDoc(s) {
-    s.unsubs.push(onSnapshot(s.callRef, (snap) => {
-        const d = snap.data();
-        if (!d || session !== s) return;
-        s.members = d.members || s.members;
-        if (d.status === 'ended') leaveCall('Call ended');
-    }, (err) => console.error('Call listener error:', err)));
+    s.unsubs.push(
+        onSnapshot(
+            s.callRef,
+            (snapshot) => {
+                const data = snapshot.data();
+
+                if (!data || !isCurrentSession(s)) return;
+
+                s.members = data.members || s.members;
+
+                if (data.status === "ended") {
+                    leaveCall("Call ended");
+                }
+            },
+            (err) => console.error("Call listener error:", err)
+        )
+    );
 }
 
 /* ---------- starting and inviting ---------- */
 
 async function createCall(users, video, label) {
     const user = ctx && ctx.auth.currentUser;
+
     if (!user || session || incoming) return;
 
-    const uids = [...new Set(users.map((u) => u.uid).filter((id) => id && id !== user.uid))]
-        .slice(0, MAX_MEMBERS - 1);
-    if (!uids.length) return;
+    const uniqueUids = [
+        ...new Set(
+            users
+                .map((person) => person.uid)
+                .filter((uid) => uid && uid !== user.uid)
+        )
+    ].slice(0, MAX_MEMBERS - 1);
+
+    if (!uniqueUids.length) return;
 
     const profile = ctx.getProfile();
-    const callRef = doc(collection(ctx.db, 'calls'));
+    const callRef = doc(collection(ctx.db, "calls"));
+
     const data = {
         hostUid: user.uid,
-        hostName: profile.displayName,
+        hostName: profile.displayName || "Anonymous",
         hostPic: safePic(profile.profilePic),
-        members: [user.uid, ...uids],
+        members: [user.uid, ...uniqueUids],
         video: !!video,
-        status: 'active',
+        status: "active",
         createdAt: serverTimestamp(),
         lastActive: serverTimestamp()
     };
 
     const s = newSession(callRef.id, data, label);
+
     await runSession(s, data);
 }
 
 export function startCall(peer, video = false) {
     if (!peer || !peer.uid) return;
-    return createCall([peer], video, peer.displayName || 'Call');
+
+    return createCall(
+        [peer],
+        video,
+        peer.displayName || "Call"
+    );
 }
 
 export function startGroupCall(users, video = false) {
-    return createCall(users, video, 'Group call');
+    return createCall(users, video, "Group call");
 }
 
 export async function inviteToCall(peer) {
     const s = session;
+
     if (!s || !s.joined || !peer || !peer.uid) return;
     if (s.members.includes(peer.uid)) return;
+
     if (s.members.length >= MAX_MEMBERS) {
         alert(`A call can have at most ${MAX_MEMBERS} people invited.`);
         return;
     }
+
     try {
-        await updateDoc(s.callRef, { members: arrayUnion(peer.uid) });
+        await updateDoc(s.callRef, {
+            members: arrayUnion(peer.uid)
+        });
+
         s.members = [...s.members, peer.uid];
     } catch (err) {
-        console.error('Error inviting to call:', err);
+        console.error("Error inviting to call:", err);
     }
 }
 
@@ -848,126 +1523,264 @@ export function isInCall() {
 
 function clearIncoming() {
     if (!incoming) return;
+
     incoming = null;
     stopRing();
+
     if (!session) hideBar();
 }
 
 function declineIncoming() {
     if (!incoming) return;
+
     dismissed.add(incoming.id);
     clearIncoming();
 }
 
 function acceptIncoming() {
-    const inc = incoming;
-    if (!inc || session) return;
+    const call = incoming;
+
+    if (!call || session) return;
+
     clearIncoming();
-    runSession(newSession(inc.id, inc.data, inc.data.hostName), null);
+
+    runSession(
+        newSession(call.id, call.data, call.data.hostName),
+        null
+    );
 }
 
-function isLive(d) {
-    if (d.status !== 'active') return false;
-    const last = d.lastActive && d.lastActive.toMillis ? d.lastActive.toMillis() : Date.now();
-    return Date.now() - last < STALE_CALL_MS;
+function isLive(data) {
+    if (data.status !== "active") return false;
+
+    const lastActive = timestampOf(data.lastActive);
+
+    // A missing timestamp is not proof of a stale call.
+    if (!lastActive) return true;
+
+    return Date.now() - lastActive < STALE_CALL_MS;
 }
 
-function considerCall(id, d) {
-    const live = isLive(d);
+function considerCall(id, data) {
+    const live = isLive(data);
 
     if (incoming && incoming.id === id) {
-        if (!live) clearIncoming();
-        else incoming.data = d;
+        if (!live) {
+            clearIncoming();
+        } else {
+            incoming.data = data;
+        }
+
         return;
     }
 
     if (!live) {
-        // Clean up calls whose participants all vanished (best effort)
-        if (d.status === 'active') {
-            updateDoc(doc(ctx.db, 'calls', id), { status: 'ended', endedAt: serverTimestamp() }).catch(() => {});
+        // Only attempt cleanup once a call is demonstrably stale.
+        const lastActive = timestampOf(data.lastActive);
+
+        if (
+            data.status === "active" &&
+            lastActive &&
+            Date.now() - lastActive >= STALE_CALL_MS
+        ) {
+            updateDoc(doc(ctx.db, "calls", id), {
+                status: "ended",
+                endedAt: serverTimestamp()
+            }).catch(() => {});
         }
+
         return;
     }
-    if (d.hostUid === me() || dismissed.has(id) || session || incoming) return;
 
-    incoming = { id, data: d };
+    if (
+        data.hostUid === me() ||
+        dismissed.has(id) ||
+        session ||
+        incoming
+    ) {
+        return;
+    }
+
+    incoming = {
+        id,
+        data
+    };
+
     renderIncoming();
     startRing();
 }
 
 function listenForIncoming(uid) {
-    if (incomingUnsub) incomingUnsub();
+    if (incomingUnsub) {
+        incomingUnsub();
+        incomingUnsub = null;
+    }
 
-    // Needs a composite index: calls → members (Arrays) + status (Ascending)
-    const q = query(
-        collection(ctx.db, 'calls'),
-        where('members', 'array-contains', uid),
-        where('status', '==', 'active')
+    const callsQuery = query(
+        collection(ctx.db, "calls"),
+        where("members", "array-contains", uid),
+        where("status", "==", "active")
     );
 
-    incomingUnsub = onSnapshot(q, (snap) => {
-        snap.docChanges().forEach((change) => {
-            const id = change.doc.id;
-            if (change.type === 'removed') {
-                if (incoming && incoming.id === id) clearIncoming();
-                return;
-            }
-            considerCall(id, change.doc.data());
-        });
-    }, (err) => console.error('Incoming call listener error:', err));
+    incomingUnsub = onSnapshot(
+        callsQuery,
+        (snapshot) => {
+            snapshot.docChanges().forEach((change) => {
+                const id = change.doc.id;
+
+                if (change.type === "removed") {
+                    if (incoming && incoming.id === id) {
+                        clearIncoming();
+                    }
+
+                    return;
+                }
+
+                considerCall(id, change.doc.data());
+            });
+        },
+        (err) => console.error("Incoming call listener error:", err)
+    );
 }
 
 /* ---------- controls ---------- */
 
 function toggleMute() {
     const s = session;
+
     if (!s || !s.media) return;
+
     const tracks = s.media.send.getAudioTracks();
+
     if (!tracks.length) return;
-    const muted = tracks[0].enabled;
-    tracks.forEach((t) => { t.enabled = !muted; });
-    els.mute.setAttribute('aria-pressed', String(muted));
-    els.mute.title = muted ? 'Unmute' : 'Mute';
-    els.mute.setAttribute('aria-label', els.mute.title);
-    els.mute.firstElementChild.className = muted ? 'fa-solid fa-microphone-slash' : 'fa-solid fa-microphone';
-    if (s.localUi) setTileState(s.localUi, muted ? 'Muted' : '');
+
+    const currentlyEnabled = tracks[0].enabled;
+    const nextEnabled = !currentlyEnabled;
+
+    tracks.forEach((track) => {
+        track.enabled = nextEnabled;
+    });
+
+    els.mute.setAttribute("aria-pressed", String(!nextEnabled));
+    els.mute.title = nextEnabled ? "Mute" : "Unmute";
+    els.mute.setAttribute("aria-label", els.mute.title);
+
+    if (els.mute.firstElementChild) {
+        els.mute.firstElementChild.className = nextEnabled
+            ? "fa-solid fa-microphone"
+            : "fa-solid fa-microphone-slash";
+    }
+
+    if (s.localUi) {
+        setTileState(s.localUi, nextEnabled ? "" : "Muted");
+    }
 }
 
 function toggleCamera() {
     const s = session;
+
     if (!s || !s.media) return;
+
     const tracks = s.media.send.getVideoTracks();
+
     if (!tracks.length) return;
-    const off = tracks[0].enabled;
-    tracks.forEach((t) => { t.enabled = !off; });
-    els.camera.setAttribute('aria-pressed', String(off));
-    els.camera.title = off ? 'Turn camera on' : 'Turn camera off';
-    els.camera.setAttribute('aria-label', els.camera.title);
-    els.camera.firstElementChild.className = off ? 'fa-solid fa-video-slash' : 'fa-solid fa-video';
+
+    const currentlyEnabled = tracks[0].enabled;
+    const nextEnabled = !currentlyEnabled;
+
+    tracks.forEach((track) => {
+        track.enabled = nextEnabled;
+    });
+
+    els.camera.setAttribute("aria-pressed", String(!nextEnabled));
+    els.camera.title = nextEnabled ? "Turn camera off" : "Turn camera on";
+    els.camera.setAttribute("aria-label", els.camera.title);
+
+    if (els.camera.firstElementChild) {
+        els.camera.firstElementChild.className = nextEnabled
+            ? "fa-solid fa-video"
+            : "fa-solid fa-video-slash";
+    }
+
+    if (s.localUi) {
+        s.localUi.tile.classList.toggle("camera-off", !nextEnabled);
+    }
 }
 
-/* ---------- init ---------- */
+/* ---------- initialization ---------- */
 
 export function initCalls(context) {
     ctx = context;
+
+    if (initialized) {
+        return;
+    }
+
     cacheElements();
-    if (!els.bar) return;
 
-    els.accept.addEventListener('click', acceptIncoming);
-    els.hangup.addEventListener('click', () => {
-        if (incoming && !session) declineIncoming();
-        else leaveCall('Call ended');
+    if (!els.bar || !els.grid) {
+        console.error("Aurora call UI elements could not be found.");
+        return;
+    }
+
+    initialized = true;
+
+    els.accept.addEventListener("click", acceptIncoming);
+
+    els.hangup.addEventListener("click", () => {
+        if (incoming && !session) {
+            declineIncoming();
+        } else {
+            leaveCall("Call ended");
+        }
     });
-    els.mute.addEventListener('click', toggleMute);
-    els.camera.addEventListener('click', toggleCamera);
 
-    window.addEventListener('beforeunload', () => {
+    els.mute.addEventListener("click", toggleMute);
+    els.camera.addEventListener("click", toggleCamera);
+
+    window.addEventListener("beforeunload", () => {
         const s = session;
+
         if (!s || !s.joined) return;
-        if (s.peers.size === 0) updateDoc(s.callRef, { status: 'ended', endedAt: serverTimestamp() }).catch(() => {});
-        deleteDoc(s.meRef).catch(() => {});
+
+        // Best effort only. Browsers may terminate asynchronous work during
+        // unload, so normal leaveCall() remains the reliable cleanup path.
+        if (s.peers.size === 0) {
+            updateDoc(s.callRef, {
+                status: "ended",
+                endedAt: serverTimestamp()
+            }).catch(() => {});
+        }
+
+        if (s.meRef) {
+            deleteDoc(s.meRef).catch(() => {});
+        }
     });
 
-    const user = ctx.auth.currentUser;
-    if (user) listenForIncoming(user.uid);
+    if (ctx.auth.onAuthStateChanged) {
+        authUnsubscribe = ctx.auth.onAuthStateChanged((user) => {
+            if (user) {
+                listenForIncoming(user.uid);
+            } else {
+                if (incomingUnsub) {
+                    incomingUnsub();
+                    incomingUnsub = null;
+                }
+
+                if (incoming) {
+                    clearIncoming();
+                }
+
+                if (session) {
+                    leaveCall("Signed out");
+                }
+            }
+        });
+    } else {
+        const user = ctx.auth.currentUser;
+
+        if (user) {
+            listenForIncoming(user.uid);
+        }
+    }
 }
