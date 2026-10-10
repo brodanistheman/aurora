@@ -1,0 +1,193 @@
+/* ==========================================================================
+   Calls
+   Load after style.css. Uses the same design tokens; adds no new colours.
+   ========================================================================== */
+
+/* ---------- Inline call bar (docked at the top of the chat column) ---------- */
+.call-bar {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px var(--gutter);
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+}
+
+.call-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 36px;
+}
+
+.call-avatar {
+    flex: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: var(--surface-raised);
+}
+
+.call-bar[data-mode="incoming"] .call-avatar,
+.call-bar[data-mode="outgoing"] .call-avatar {
+    animation: call-pulse 1.6s ease-out infinite;
+}
+
+@keyframes call-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(194, 178, 143, 0.5); }
+    100% { box-shadow: 0 0 0 10px rgba(194, 178, 143, 0); }
+}
+
+.call-meta {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    line-height: 1.3;
+}
+
+.call-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.call-status {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.call-bar[data-mode="active"] .call-status {
+    color: var(--ok);
+}
+
+.call-actions {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.call-btn {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    margin: 0;
+    padding: 0;
+    background: var(--surface-raised);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-size: 13px;
+}
+
+.call-btn[aria-pressed="true"] {
+    background: var(--text);
+    border-color: var(--text);
+    color: var(--bg);
+}
+
+.call-accept {
+    background: var(--ok);
+    border-color: var(--ok);
+    color: var(--bg);
+}
+
+.call-end {
+    background: var(--danger);
+    border-color: var(--danger);
+    color: var(--bg);
+}
+
+/* ---------- Video ---------- */
+.call-videos {
+    position: relative;
+    width: 100%;
+    max-width: 420px;
+    aspect-ratio: 16 / 9;
+    max-height: 236px;
+    overflow: hidden;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+}
+
+.call-remote {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.call-local {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    width: 28%;
+    max-width: 120px;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    background: var(--surface-raised);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+    transform: scaleX(-1);
+}
+
+/* ---------- Call buttons in the active users list ---------- */
+.user-actions {
+    flex: none;
+    display: none;
+    align-items: center;
+}
+
+.user-row:hover .user-actions,
+.user-row:focus-within .user-actions {
+    display: flex;
+}
+
+@media (hover: none) {
+    .user-actions {
+        display: flex;
+    }
+}
+
+.user-call {
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    border-radius: var(--radius-sm);
+    color: var(--text-faint);
+    font-size: 10px;
+    transition: color 0.15s ease;
+}
+
+.user-call:hover {
+    background: transparent;
+    color: var(--text);
+    opacity: 1;
+}
+
+/* Hide call buttons while already in a call */
+body.in-call .user-actions {
+    display: none !important;
+}
+
+@media (max-width: 720px) {
+    .call-videos {
+        max-width: 100%;
+        max-height: 200px;
+    }
+}
