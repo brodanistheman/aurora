@@ -5,6 +5,7 @@ import {
     startAfter, onSnapshot, serverTimestamp, getDocs, deleteDoc, updateDoc, increment
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 import { loadAccount, updateAccount } from "../account-store.js";
+import { initCalls, startCall, endActiveCall } from "./calls.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyCLKCCpNbCs2AJm7g0JtGIjL43X5hr31N8",
@@ -60,6 +61,7 @@ const defaultAvatar = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/200
 let currentDisplayName = 'Anonymous';
 let currentProfilePic = '';
 let presenceInterval = null;
+let callsStarted = false;
 
 function escapeHtml(str) {
     if (str === null || str === undefined) return '';
@@ -159,6 +161,20 @@ function setupPresence(user) {
     }, 30000);
 }
 
+function makeCallButton(iconClass, label, onClick) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'user-call';
+    btn.title = label;
+    btn.setAttribute('aria-label', label);
+    btn.innerHTML = `<i class="${iconClass}"></i>`;
+    btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        onClick();
+    });
+    return btn;
+}
+
 function initOnlineUsersList() {
     if (!onlineUsersList) return;
     const statusQuery = collection(db, "status");
@@ -185,6 +201,8 @@ function initOnlineUsersList() {
             return;
         }
 
+        const me = auth.currentUser;
+
         active.forEach((data) => {
             const isAway = data.status === 'away';
             const name = data.displayName || 'Anonymous';
@@ -206,7 +224,20 @@ function initOnlineUsersList() {
             dot.className = `status ${isAway ? 'status-away' : 'status-online'}`;
             dot.title = isAway ? 'Away' : 'Online';
 
-            row.append(avatar, nameEl, dot);
+            row.append(avatar, nameEl);
+
+            if (me && data.uid && data.uid !== me.uid) {
+                const peer = { uid: data.uid, displayName: name, profilePic: data.profilePic };
+                const actions = document.createElement('div');
+                actions.className = 'user-actions';
+                actions.append(
+                    makeCallButton('fa-solid fa-phone', `Call ${name}`, () => startCall(peer, false)),
+                    makeCallButton('fa-solid fa-video', `Video call ${name}`, () => startCall(peer, true))
+                );
+                row.append(actions);
+            }
+
+            row.append(dot);
             onlineUsersList.appendChild(row);
         });
     });
@@ -789,11 +820,22 @@ onAuthStateChanged(auth, async (user) => {
     setupPresence(user);
     initOnlineUsersList();
     initChat();
+
+    if (!callsStarted) {
+        callsStarted = true;
+        initCalls({
+            auth,
+            db,
+            setAvatar,
+            getProfile: () => ({ displayName: currentDisplayName, profilePic: currentProfilePic })
+        });
+    }
 });
 
 if (logoutButton) {
     logoutButton.addEventListener('click', async () => {
         const user = auth.currentUser;
+        try { await endActiveCall(); } catch { /* ignore */ }
         if (user) {
             await setDoc(doc(db, "status", user.uid), { status: 'offline', lastChanged: serverTimestamp() }, { merge: true });
         }
