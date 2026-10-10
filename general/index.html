@@ -17,6 +17,14 @@
             <h1 class="brand">Aurora</h1>
 
             <nav class="nav" aria-label="Account">
+                <button id="group-call-button" class="nav-item" type="button" aria-label="Start group call">
+                    <i class="fa-solid fa-users"></i>
+                    <span class="nav-label">Group call</span>
+                </button>
+                <button id="group-video-button" class="nav-item" type="button" aria-label="Start group video call">
+                    <i class="fa-solid fa-video"></i>
+                    <span class="nav-label">Group video</span>
+                </button>
                 <button id="profile-button" class="nav-item" type="button" aria-label="Profile">
                     <i class="fa-regular fa-user"></i>
                     <span class="nav-label">Profile</span>
@@ -44,10 +52,7 @@
 
             <!-- Inline call bar: sits in the page flow, not a modal -->
             <section id="call-bar" class="call-bar hidden" aria-label="Call" aria-live="polite">
-                <div id="call-videos" class="call-videos hidden">
-                    <video id="remote-video" class="call-remote" autoplay playsinline muted></video>
-                    <video id="local-video" class="call-local" autoplay playsinline muted></video>
-                </div>
+                <div id="call-grid" class="call-grid hidden"></div>
                 <div class="call-row">
                     <img id="call-avatar" class="call-avatar" alt="">
                     <div class="call-meta">
@@ -64,12 +69,11 @@
                         <button id="call-camera" class="call-btn hidden" type="button" title="Turn camera off" aria-label="Turn camera off" aria-pressed="false">
                             <i class="fa-solid fa-video"></i>
                         </button>
-                        <button id="call-hangup" class="call-btn call-end" type="button" title="End call" aria-label="End call">
+                        <button id="call-hangup" class="call-btn call-end" type="button" title="Leave call" aria-label="Leave call">
                             <i class="fa-solid fa-phone-slash"></i>
                         </button>
                     </div>
                 </div>
-                <audio id="remote-audio" autoplay></audio>
             </section>
 
             <div id="message-box" role="log" aria-live="polite" aria-label="Chat messages"></div>
