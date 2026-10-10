@@ -5,7 +5,6 @@ import {
     startAfter, onSnapshot, serverTimestamp, getDocs, deleteDoc, updateDoc, increment
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 import { loadAccount, updateAccount } from "../account-store.js";
-import { initCalls, startCall, startGroupCall, inviteToCall, isInCall, endActiveCall } from "./calls.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyCLKCCpNbCs2AJm7g0JtGIjL43X5hr31N8",
@@ -61,8 +60,6 @@ const defaultAvatar = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/200
 let currentDisplayName = 'Anonymous';
 let currentProfilePic = '';
 let presenceInterval = null;
-let callsStarted = false;
-let activeUsers = [];
 
 function escapeHtml(str) {
     if (str === null || str === undefined) return '';
@@ -162,29 +159,6 @@ function setupPresence(user) {
     }, 30000);
 }
 
-function makeCallButton(label, extraClass, innerHtml, onClick, dynamicLabel) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = `user-call ${extraClass}`;
-    btn.title = label;
-    btn.setAttribute('aria-label', label);
-    btn.innerHTML = innerHtml;
-    if (dynamicLabel) {
-        const refresh = () => {
-            const text = dynamicLabel();
-            btn.title = text;
-            btn.setAttribute('aria-label', text);
-        };
-        btn.addEventListener('mouseenter', refresh);
-        btn.addEventListener('focus', refresh);
-    }
-    btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        onClick();
-    });
-    return btn;
-}
-
 function initOnlineUsersList() {
     if (!onlineUsersList) return;
     const statusQuery = collection(db, "status");
@@ -204,16 +178,12 @@ function initOnlineUsersList() {
             return String(a.displayName || '').localeCompare(String(b.displayName || ''));
         });
 
-        activeUsers = active;
-
         if (onlineCount) onlineCount.textContent = active.length ? `· ${active.length}` : '';
 
         if (!active.length) {
             onlineUsersList.innerHTML = '<p class="empty-state">No one is online.</p>';
             return;
         }
-
-        const me = auth.currentUser;
 
         active.forEach((data) => {
             const isAway = data.status === 'away';
@@ -236,31 +206,7 @@ function initOnlineUsersList() {
             dot.className = `status ${isAway ? 'status-away' : 'status-online'}`;
             dot.title = isAway ? 'Away' : 'Online';
 
-            row.append(avatar, nameEl);
-
-            if (me && data.uid && data.uid !== me.uid) {
-                const peer = { uid: data.uid, displayName: name, profilePic: data.profilePic };
-                const actions = document.createElement('div');
-                actions.className = 'user-actions';
-                actions.append(
-                    makeCallButton(
-                        `Call ${name}`,
-                        'user-call-voice',
-                        '<i class="fa-solid fa-phone icon-call"></i><i class="fa-solid fa-user-plus icon-add"></i>',
-                        () => (isInCall() ? inviteToCall(peer) : startCall(peer, false)),
-                        () => (isInCall() ? `Add ${name} to call` : `Call ${name}`)
-                    ),
-                    makeCallButton(
-                        `Video call ${name}`,
-                        'user-call-video',
-                        '<i class="fa-solid fa-video"></i>',
-                        () => startCall(peer, true)
-                    )
-                );
-                row.append(actions);
-            }
-
-            row.append(dot);
+            row.append(avatar, nameEl, dot);
             onlineUsersList.appendChild(row);
         });
     });
@@ -843,22 +789,11 @@ onAuthStateChanged(auth, async (user) => {
     setupPresence(user);
     initOnlineUsersList();
     initChat();
-
-    if (!callsStarted) {
-        callsStarted = true;
-        initCalls({
-            auth,
-            db,
-            setAvatar,
-            getProfile: () => ({ displayName: currentDisplayName, profilePic: currentProfilePic })
-        });
-    }
 });
 
 if (logoutButton) {
     logoutButton.addEventListener('click', async () => {
         const user = auth.currentUser;
-        try { await endActiveCall(); } catch { /* ignore */ }
         if (user) {
             await setDoc(doc(db, "status", user.uid), { status: 'offline', lastChanged: serverTimestamp() }, { merge: true });
         }
@@ -869,27 +804,8 @@ if (logoutButton) {
     });
 }
 
-function startGroup(video) {
-    if (isInCall()) return;
-    const me = auth.currentUser;
-    const others = activeUsers
-        .filter((u) => u.uid && (!me || u.uid !== me.uid))
-        .map((u) => ({ uid: u.uid, displayName: u.displayName, profilePic: u.profilePic }));
-    if (!others.length) {
-        alert('No one else is online to call right now.');
-        return;
-    }
-    startGroupCall(others, video);
-}
-
-const groupCallButton = document.getElementById('group-call-button');
-const groupVideoButton = document.getElementById('group-video-button');
-if (groupCallButton) groupCallButton.addEventListener('click', () => startGroup(false));
-if (groupVideoButton) groupVideoButton.addEventListener('click', () => startGroup(true));
-
 if (settingsButton) {
     settingsButton.addEventListener('click', () => {
         window.location.href = '/aurora/settings/account/';
     });
 }
-
