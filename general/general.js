@@ -7,7 +7,7 @@ import {
 import { loadAccount, updateAccount } from "../account-store.js";
 
 const firebaseConfig = {
-    apiKey: "AIzaSyCLKCCpNbCs2AJm7g0JtGIjL43X5hr31N8",
+    apiKey: "AIzaSyCLKCCbQSkamV2LdxSFObbBg9u73",
     authDomain: "aurora-9e0fe.firebaseapp.com",
     projectId: "aurora-9e0fe",
     storageBucket: "aurora-9e0fe.firebasestorage.app",
@@ -230,6 +230,7 @@ if (imageModal) {
         if (e.target === imageModal) closeLightbox();
     });
 }
+
 document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (imageModal && !imageModal.classList.contains('hidden')) {
@@ -317,6 +318,23 @@ function buildMessageNode(msg, ms, inThread = false) {
     const replyCount = Number(msg.replyCount) || 0;
 
     let contentHtml = '';
+
+    // Whiteboard messages render as clickable cards in the chat feed.
+    if (msg.type === 'whiteboard' && msg.whiteboardId) {
+        contentHtml += `
+            <button type="button"
+                class="whiteboard-message-card"
+                data-whiteboard-id="${escapeHtml(msg.whiteboardId)}"
+                aria-label="Join whiteboard">
+                <span class="whiteboard-card-header">
+                    <span class="whiteboard-card-title">Shared whiteboard</span>
+                    <span class="whiteboard-card-hint">Click to join</span>
+                </span>
+                <span class="whiteboard-card-preview" aria-hidden="true"></span>
+            </button>
+        `;
+    }
+
     if (msg.text) {
         contentHtml += `<span class="message-text">${formatMessageText(msg.text)}</span>`;
         if (msg.edited) contentHtml += `<span class="edited-tag"> (edited)</span>`;
@@ -364,11 +382,19 @@ function buildMessageNode(msg, ms, inThread = false) {
         image.src = msg.imageUrl;
         image.addEventListener('click', () => openLightbox(image.src));
     }
+
     const video = div.querySelector('.message-video');
     if (video) video.src = msg.videoUrl;
 
     const editBtn = div.querySelector('.msg-edit-btn');
     if (editBtn) editBtn.addEventListener('click', () => enterEditMode(div, msg));
+
+    const whiteboardCard = div.querySelector('.whiteboard-message-card');
+    if (whiteboardCard) {
+        whiteboardCard.addEventListener('click', () => {
+            openWhiteboard(msg.whiteboardId);
+        });
+    }
 
     const threadBtn = div.querySelector('.msg-thread-btn');
     if (threadBtn) threadBtn.addEventListener('click', () => openThread(msg.id));
@@ -627,6 +653,68 @@ if (threadForm) {
     });
 }
 
+/* ---------- Shared whiteboards ---------- */
+
+async function createWhiteboard() {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    setSending(true);
+
+    try {
+        const boardRef = await addDoc(collection(db, 'whiteboards'), {
+            ownerUid: user.uid,
+            ownerDisplayName: currentDisplayName,
+            title: `${currentDisplayName}'s whiteboard`,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+        });
+
+        await addDoc(collection(db, 'messages'), {
+            uid: user.uid,
+            displayName: currentDisplayName,
+            profilePic: currentProfilePic,
+            text: '',
+            imageUrl: null,
+            videoUrl: null,
+            type: 'whiteboard',
+            whiteboardId: boardRef.id,
+            createdAt: serverTimestamp()
+        });
+
+        if (messageInput) messageInput.value = '';
+        if (messageBox) messageBox.scrollTop = messageBox.scrollHeight;
+    } catch (error) {
+        console.error('Error creating whiteboard:', error);
+        alert('Could not create the whiteboard. Check your Firestore rules and try again.');
+    } finally {
+        setSending(false);
+        if (messageInput) messageInput.focus();
+    }
+}
+
+function openWhiteboard(boardId) {
+    if (!boardId) return;
+
+    if (window.AuroraWhiteboard && typeof window.AuroraWhiteboard.open === 'function') {
+        window.AuroraWhiteboard.open(boardId);
+        return;
+    }
+
+    if (typeof window.openWhiteboard === 'function') {
+        window.openWhiteboard(boardId);
+        return;
+    }
+
+    window.dispatchEvent(new CustomEvent('aurora:open-whiteboard', {
+        detail: { boardId }
+    }));
+}
+
+function isWhiteboardCommand(text) {
+    return String(text || '').trim().toLowerCase() === '/whiteboard';
+}
+
 /* ---------- Sending ---------- */
 
 async function clearAllMessages() {
@@ -642,6 +730,11 @@ const MODERATOR_COMMANDS = {
 async function sendChatMessage(text, attachment = null) {
     const user = auth.currentUser;
     if (!user) return;
+
+    if (isWhiteboardCommand(text)) {
+        await createWhiteboard();
+        return;
+    }
 
     const command = text ? MODERATOR_COMMANDS[text.trim().toLowerCase()] : null;
     if (command) {
@@ -795,7 +888,10 @@ if (logoutButton) {
     logoutButton.addEventListener('click', async () => {
         const user = auth.currentUser;
         if (user) {
-            await setDoc(doc(db, "status", user.uid), { status: 'offline', lastChanged: serverTimestamp() }, { merge: true });
+            await setDoc(doc(db, "status", user.uid), {
+                status: 'offline',
+                lastChanged: serverTimestamp()
+            }, { merge: true });
         }
         if (presenceInterval) clearInterval(presenceInterval);
         await signOut(auth);
