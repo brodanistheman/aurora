@@ -981,3 +981,233 @@ label[for="profile-pic-input"] {
         padding: 20px;
     }
 }
+
+/* ==========================================================================
+   Shared whiteboards
+   Used by whiteboard.js for the chat card and expanded collaborative canvas.
+   ========================================================================== */
+.whiteboard-message-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: min(560px, 100%);
+    margin-top: 5px;
+    padding: 12px;
+    border: 1px solid var(--line-strong);
+    background: var(--surface);
+    cursor: pointer;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.whiteboard-message-card:hover,
+.whiteboard-message-card:focus-visible {
+    border-color: #44443f;
+    background: #080808;
+}
+
+.whiteboard-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-width: 0;
+}
+
+.whiteboard-card-title {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.whiteboard-card-hint {
+    flex: none;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.whiteboard-card-preview {
+    display: block;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    background-color: #050505;
+    border: 1px solid var(--line);
+}
+
+.whiteboard-card-preview canvas,
+.whiteboard-preview-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.whiteboard-overlay,
+.whiteboard-modal,
+.whiteboard-expanded {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+    background: rgba(0, 0, 0, 0.88);
+}
+
+.whiteboard-window,
+.whiteboard-panel {
+    display: flex;
+    flex-direction: column;
+    width: min(1100px, 100%);
+    max-height: min(92dvh, 900px);
+    min-height: 0;
+    overflow: hidden;
+    background: #050505;
+    border: 1px solid var(--line-strong);
+}
+
+.whiteboard-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 10px;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface);
+}
+
+.whiteboard-toolbar button,
+.whiteboard-toolbar select,
+.whiteboard-toolbar input,
+.whiteboard-controls button,
+.whiteboard-controls select,
+.whiteboard-controls input {
+    width: auto;
+    min-width: 0;
+    height: 32px;
+    margin: 0;
+    padding: 0 9px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+    background: #0b0b0b;
+    color: var(--text);
+    font: inherit;
+    font-size: 12px;
+}
+
+.whiteboard-toolbar button:hover,
+.whiteboard-controls button:hover {
+    opacity: 1;
+    border-color: #45453f;
+    background: #151515;
+}
+
+.whiteboard-toolbar button[aria-pressed="true"],
+.whiteboard-toolbar button.active,
+.whiteboard-controls button.active {
+    border-color: #55554e;
+    background: #20201e;
+    color: var(--text);
+}
+
+.whiteboard-toolbar input[type="color"],
+.whiteboard-controls input[type="color"] {
+    width: 34px;
+    padding: 3px;
+}
+
+.whiteboard-toolbar input[type="range"],
+.whiteboard-controls input[type="range"] {
+    width: 100px;
+    padding: 0;
+}
+
+.whiteboard-toolbar input[type="checkbox"],
+.whiteboard-controls input[type="checkbox"] {
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    accent-color: var(--text);
+}
+
+.whiteboard-toolbar label,
+.whiteboard-controls label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.whiteboard-canvas-wrap,
+.whiteboard-canvas-container {
+    position: relative;
+    flex: 1;
+    min-height: 220px;
+    overflow: auto;
+    background: #050505;
+}
+
+.whiteboard-canvas,
+.whiteboard-drawing-canvas,
+.whiteboard-canvas-wrap canvas {
+    display: block;
+    max-width: 100%;
+    touch-action: none;
+    background: #050505;
+}
+
+.whiteboard-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 12px;
+    border-top: 1px solid var(--line);
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.whiteboard-close,
+.whiteboard-leave,
+.whiteboard-clear {
+    width: auto;
+    margin: 0;
+}
+
+@media (max-width: 720px) {
+    .whiteboard-overlay,
+    .whiteboard-modal,
+    .whiteboard-expanded {
+        padding: 0;
+    }
+
+    .whiteboard-window,
+    .whiteboard-panel {
+        width: 100%;
+        height: 100%;
+        max-height: 100dvh;
+        border-left: 0;
+        border-right: 0;
+    }
+
+    .whiteboard-toolbar {
+        gap: 6px;
+        padding: 8px;
+    }
+
+    .whiteboard-toolbar button,
+    .whiteboard-toolbar select {
+        height: 30px;
+        padding: 0 7px;
+        font-size: 11px;
+    }
+
+    .whiteboard-toolbar input[type="range"] {
+        width: 72px;
+    }
+}
