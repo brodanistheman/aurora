@@ -7,7 +7,7 @@ import {
 import { loadAccount, updateAccount } from "../account-store.js";
 
 const firebaseConfig = {
-    apiKey: "AIzaSyCLKCCbQSkamV2LdxSFObbBg9u73",
+    apiKey: "AIzaSyCLKCCpNbCs2AJm7g0JtGIjL43X5hr31N8",
     authDomain: "aurora-9e0fe.firebaseapp.com",
     projectId: "aurora-9e0fe",
     storageBucket: "aurora-9e0fe.firebasestorage.app",
