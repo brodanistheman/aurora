@@ -306,9 +306,11 @@ function messageTimestampMs(msg) {
     return msg.createdAt && msg.createdAt.toMillis ? msg.createdAt.toMillis() : Date.now();
 }
 
-// Skips thread replies, call messages, and empty messages (no text and no media).
+// Skips thread replies and empty messages. Call announcements are kept: call.js
+// fills their .call-widget-slot with the live widget.
 function isMainFeedMessage(msg) {
-    if (msg.threadId || msg.type === 'call') return false;
+    if (msg.threadId) return false;
+    if (msg.type === 'call') return Boolean(msg.callId);
     return Boolean(msg.text || msg.imageUrl || msg.videoUrl);
 }
 
@@ -319,10 +321,14 @@ function buildMessageNode(msg, ms, inThread = false) {
     div.dataset.ts = String(ms);
 
     const isOwn = !!(auth.currentUser && msg.uid === auth.currentUser.uid);
+    const isCall = msg.type === 'call';
     const replyCount = Number(msg.replyCount) || 0;
 
     let contentHtml = '';
 
+    if (isCall) {
+        contentHtml += `<div class="call-widget-slot" data-call-id="${escapeHtml(msg.callId)}"></div>`;
+    }
     if (msg.text) {
         contentHtml += `<span class="message-text">${formatMessageText(msg.text)}</span>`;
         if (msg.edited) contentHtml += `<span class="edited-tag"> (edited)</span>`;
@@ -334,14 +340,14 @@ function buildMessageNode(msg, ms, inThread = false) {
         contentHtml += `<div class="message-media"><video class="message-video" controls preload="metadata"></video></div>`;
     }
 
-    const threadBtnHtml = inThread
+    const threadBtnHtml = (inThread || isCall)
         ? ''
         : `<button type="button" class="msg-action msg-thread-btn" title="Reply in thread" aria-label="Reply in thread"><i class="fa-regular fa-comment"></i></button>`;
-    const editBtnHtml = (isOwn && msg.text)
+    const editBtnHtml = (isOwn && msg.text && !isCall)
         ? `<button type="button" class="msg-action msg-edit-btn" title="Edit" aria-label="Edit message"><i class="fa-solid fa-pen"></i></button>`
         : '';
 
-    const repliesHtml = (!inThread && replyCount > 0)
+    const repliesHtml = (!inThread && !isCall && replyCount > 0)
         ? `<button type="button" class="thread-link"><i class="fa-regular fa-comment"></i>${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}</button>`
         : '';
 
