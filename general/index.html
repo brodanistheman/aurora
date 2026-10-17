@@ -28,6 +28,10 @@
                     <i class="fa-solid fa-arrow-right-from-bracket"></i>
                     <span class="nav-label">Log out</span>
                 </button>
+                <button id="call-button" class="nav-item" type="button" aria-label="Start Call">
+                    <i class="fa-solid fa-phone"></i>
+                    <span id="call-button-label" class="nav-label">Start Call</span>
+                </button>
             </nav>
 
             <section class="users" aria-label="Active users">
@@ -39,9 +43,6 @@
         <main class="chat">
             <header class="chat-header">
                 <h2 class="chat-title">General</h2>
-                <button id="call-button" class="call-join-btn" type="button" aria-label="Join voice call">
-                    <i class="fa-solid fa-phone"></i> Join call
-                </button>
             </header>
 
             <div id="message-box" role="log" aria-live="polite" aria-label="Chat messages"></div>

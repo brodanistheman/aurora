@@ -839,29 +839,11 @@ label[for="profile-pic-input"] {
 
 /* ==========================================================================
    Calling
-   Used by call.js for the join button and the call overlay.
+   Used by call.js for the sidebar call button and the call overlay.
    ========================================================================== */
-.call-join-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    width: auto;
-    height: 28px;
-    margin: 0;
-    padding: 0 10px;
-    background: transparent;
-    border: 1px solid var(--line-strong);
-    border-radius: var(--radius-sm);
-    color: var(--text-muted);
-    font-size: 12px;
-    font-weight: 500;
-}
-
-.call-join-btn:hover {
-    background: transparent;
-    color: var(--text);
-    border-color: var(--text-faint);
-    opacity: 1;
+.nav-item.in-call,
+.nav-item.in-call i {
+    color: var(--ok);
 }
 
 .call-overlay {
@@ -876,6 +858,7 @@ label[for="profile-pic-input"] {
 }
 
 .call-window {
+    position: relative;
     display: flex;
     flex-direction: column;
     width: min(1000px, 100%);
@@ -894,6 +877,12 @@ label[for="profile-pic-input"] {
     height: var(--bar-h);
     padding: 0 var(--gutter);
     border-bottom: 1px solid var(--line);
+}
+
+.call-header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .call-title {
@@ -919,12 +908,17 @@ label[for="profile-pic-input"] {
     overflow-y: auto;
 }
 
+.call-grid.has-pin {
+    grid-auto-rows: minmax(120px, 1fr);
+}
+
 .call-tile {
     position: relative;
     background: var(--surface-raised);
     border: 1px solid var(--line);
     border-radius: var(--radius);
     overflow: hidden;
+    cursor: pointer;
     transition: border-color 0.15s ease;
 }
 
@@ -933,6 +927,12 @@ label[for="profile-pic-input"] {
     border-color: var(--ok);
     outline: 2px solid var(--ok);
     outline-offset: -2px;
+}
+
+.call-tile.pinned {
+    grid-column: 1 / -1;
+    grid-row: span 3;
+    min-height: 320px;
 }
 
 .call-tile-media {
@@ -951,7 +951,16 @@ label[for="profile-pic-input"] {
     transform: scaleX(-1);
 }
 
-/* Profile picture shown in the tile while the camera is off */
+.call-tile.stream .call-video {
+    object-fit: contain;
+    background: #000;
+}
+
+.call-tile.video-hidden .call-video {
+    visibility: hidden;
+}
+
+/* Profile picture shown while the camera is off or the video is hidden */
 .call-avatar {
     position: absolute;
     inset: 0;
@@ -966,46 +975,26 @@ label[for="profile-pic-input"] {
     border-radius: 50%;
     object-fit: cover;
     background: var(--line);
-    transition: box-shadow 0.15s ease;
 }
 
-.call-tile.speaking .call-avatar img {
-    box-shadow: 0 0 0 3px var(--ok);
-}
-
-.call-tile.has-video .call-avatar {
+.call-tile.has-video:not(.video-hidden) .call-avatar {
     display: none;
 }
 
+/* Name only: no frame, no icon */
 .call-tile-name {
     position: absolute;
-    left: 8px;
-    bottom: 8px;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    max-width: calc(100% - 16px);
-    padding: 3px 10px 3px 4px;
-    background: rgba(0, 0, 0, 0.7);
-    border-radius: 999px;
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--text);
-}
-
-.call-tile-name span {
+    left: 12px;
+    bottom: 10px;
+    max-width: calc(100% - 24px);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-}
-
-.call-tile-name-avatar {
-    flex: none;
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    object-fit: cover;
-    background: var(--line);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 8px rgba(0, 0, 0, 0.8);
+    pointer-events: none;
 }
 
 .call-controls {
@@ -1014,15 +1003,10 @@ label[for="profile-pic-input"] {
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-wrap: wrap;
     gap: 10px;
     padding: 12px;
     border-top: 1px solid var(--line);
-}
-
-.call-ctrl-group {
-    display: flex;
-    align-items: center;
-    gap: 4px;
 }
 
 .call-ctrl {
@@ -1037,6 +1021,9 @@ label[for="profile-pic-input"] {
     border-radius: 50%;
     color: var(--text);
     font-size: 15px;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
 }
 
 .call-ctrl:hover {
@@ -1049,11 +1036,10 @@ label[for="profile-pic-input"] {
     color: var(--bg);
 }
 
-.call-ctrl-small {
-    width: 24px;
-    height: 24px;
-    font-size: 10px;
-    color: var(--text-muted);
+.call-ctrl.active {
+    background: var(--ok);
+    border-color: var(--ok);
+    color: #fff;
 }
 
 .call-leave {
@@ -1067,19 +1053,27 @@ label[for="profile-pic-input"] {
     opacity: 0.85;
 }
 
-/* Microphone picker popover */
+/* Voice settings popover (hold the mic, or use the sliders button) */
 .call-menu {
     position: absolute;
     bottom: calc(100% - 4px);
     left: 50%;
     transform: translateX(-50%);
-    width: min(320px, calc(100% - 24px));
-    padding: 12px;
+    width: min(340px, calc(100% - 24px));
+    max-height: min(70dvh, 520px);
+    overflow-y: auto;
+    padding: 14px;
     background: var(--surface-raised);
     border: 1px solid var(--line-strong);
     border-radius: var(--radius);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
     z-index: 5;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+}
+
+.call-menu-section {
+    margin-bottom: 14px;
 }
 
 .call-menu-label {
@@ -1089,6 +1083,12 @@ label[for="profile-pic-input"] {
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
+    color: var(--text-faint);
+}
+
+.call-menu-hint {
+    margin: 0;
+    font-size: 12px;
     color: var(--text-faint);
 }
 
@@ -1106,6 +1106,95 @@ label[for="profile-pic-input"] {
 .call-select:focus {
     outline: none;
     border-color: var(--text-faint);
+}
+
+.call-check,
+.um-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 0 0;
+    font-size: 13px;
+    color: var(--text);
+    cursor: pointer;
+}
+
+.call-check input,
+.um-check input {
+    flex: none;
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    padding: 0;
+    accent-color: var(--text);
+}
+
+/* Per-person menu (click a tile) */
+.call-usermenu {
+    position: absolute;
+    z-index: 6;
+    width: 240px;
+    padding: 10px;
+    background: var(--surface-raised);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.um-title {
+    margin-bottom: 8px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.um-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 4px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.um-range {
+    width: 100%;
+    margin: 0 0 6px;
+    padding: 0;
+    border: 0;
+    background: none;
+    accent-color: var(--text);
+}
+
+.um-sep {
+    height: 1px;
+    margin: 8px 0 4px;
+    background: var(--line);
+}
+
+.um-btn {
+    display: block;
+    width: 100%;
+    margin: 0;
+    padding: 7px 8px;
+    background: transparent;
+    border: 0;
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 500;
+    text-align: left;
+}
+
+.um-btn:hover {
+    background: var(--line-strong);
+    opacity: 1;
+}
+
+.um-btn.danger {
+    color: var(--danger);
 }
 
 /* ==========================================================================
@@ -1217,6 +1306,10 @@ label[for="profile-pic-input"] {
     .user-name {
         flex: none;
         max-width: 96px;
+    }
+
+    .chat-header {
+        display: none;
     }
 
     .thread {
