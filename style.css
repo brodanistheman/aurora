@@ -925,41 +925,104 @@ label[for="profile-pic-input"] {
     border: 1px solid var(--line);
     border-radius: var(--radius);
     overflow: hidden;
+    transition: border-color 0.15s ease;
 }
 
+/* Speaking: thicker green border (1px border + 2px inner outline) */
 .call-tile.speaking {
     border-color: var(--ok);
+    outline: 2px solid var(--ok);
+    outline-offset: -2px;
 }
 
-.call-tile-media,
-.call-video {
-    width: 100%;
-    height: 100%;
+.call-tile-media {
+    position: absolute;
+    inset: 0;
 }
 
 .call-video {
     display: block;
+    width: 100%;
+    height: 100%;
     object-fit: cover;
+}
+
+.call-video.mirror {
+    transform: scaleX(-1);
+}
+
+/* Profile picture shown in the tile while the camera is off */
+.call-avatar {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    pointer-events: none;
+}
+
+.call-avatar img {
+    width: 76px;
+    height: 76px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: var(--line);
+    transition: box-shadow 0.15s ease;
+}
+
+.call-tile.speaking .call-avatar img {
+    box-shadow: 0 0 0 3px var(--ok);
+}
+
+.call-tile.has-video .call-avatar {
+    display: none;
 }
 
 .call-tile-name {
     position: absolute;
     left: 8px;
     bottom: 8px;
-    padding: 2px 8px;
-    background: rgba(0, 0, 0, 0.65);
-    border-radius: var(--radius-sm);
-    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: calc(100% - 16px);
+    padding: 3px 10px 3px 4px;
+    background: rgba(0, 0, 0, 0.7);
+    border-radius: 999px;
+    font-size: 14px;
+    font-weight: 500;
     color: var(--text);
 }
 
+.call-tile-name span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.call-tile-name-avatar {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: var(--line);
+}
+
 .call-controls {
+    position: relative;
     flex: none;
     display: flex;
+    align-items: center;
     justify-content: center;
     gap: 10px;
     padding: 12px;
     border-top: 1px solid var(--line);
+}
+
+.call-ctrl-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
 }
 
 .call-ctrl {
@@ -986,6 +1049,13 @@ label[for="profile-pic-input"] {
     color: var(--bg);
 }
 
+.call-ctrl-small {
+    width: 24px;
+    height: 24px;
+    font-size: 10px;
+    color: var(--text-muted);
+}
+
 .call-leave {
     background: var(--danger);
     border-color: var(--danger);
@@ -995,6 +1065,47 @@ label[for="profile-pic-input"] {
 .call-leave:hover {
     background: var(--danger);
     opacity: 0.85;
+}
+
+/* Microphone picker popover */
+.call-menu {
+    position: absolute;
+    bottom: calc(100% - 4px);
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(320px, calc(100% - 24px));
+    padding: 12px;
+    background: var(--surface-raised);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    z-index: 5;
+}
+
+.call-menu-label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+}
+
+.call-select {
+    width: 100%;
+    height: 34px;
+    padding: 0 10px;
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-size: 13px;
+}
+
+.call-select:focus {
+    outline: none;
+    border-color: var(--text-faint);
 }
 
 /* ==========================================================================
