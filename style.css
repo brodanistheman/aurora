@@ -838,6 +838,166 @@ label[for="profile-pic-input"] {
 }
 
 /* ==========================================================================
+   Calling
+   Used by call.js for the join button and the call overlay.
+   ========================================================================== */
+.call-join-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    width: auto;
+    height: 28px;
+    margin: 0;
+    padding: 0 10px;
+    background: transparent;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.call-join-btn:hover {
+    background: transparent;
+    color: var(--text);
+    border-color: var(--text-faint);
+    opacity: 1;
+}
+
+.call-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+    background: rgba(0, 0, 0, 0.92);
+}
+
+.call-window {
+    display: flex;
+    flex-direction: column;
+    width: min(1000px, 100%);
+    height: min(90dvh, 760px);
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.call-header {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: var(--bar-h);
+    padding: 0 var(--gutter);
+    border-bottom: 1px solid var(--line);
+}
+
+.call-title {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+.call-status {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.call-grid {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    grid-auto-rows: minmax(160px, 1fr);
+    gap: 8px;
+    padding: 12px;
+    overflow-y: auto;
+}
+
+.call-tile {
+    position: relative;
+    background: var(--surface-raised);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+
+.call-tile.speaking {
+    border-color: var(--ok);
+}
+
+.call-tile-media,
+.call-video {
+    width: 100%;
+    height: 100%;
+}
+
+.call-video {
+    display: block;
+    object-fit: cover;
+}
+
+.call-tile-name {
+    position: absolute;
+    left: 8px;
+    bottom: 8px;
+    padding: 2px 8px;
+    background: rgba(0, 0, 0, 0.65);
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    color: var(--text);
+}
+
+.call-controls {
+    flex: none;
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    padding: 12px;
+    border-top: 1px solid var(--line);
+}
+
+.call-ctrl {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    margin: 0;
+    padding: 0;
+    background: var(--surface-raised);
+    border: 1px solid var(--line-strong);
+    border-radius: 50%;
+    color: var(--text);
+    font-size: 15px;
+}
+
+.call-ctrl:hover {
+    background: var(--line-strong);
+    opacity: 1;
+}
+
+.call-ctrl[aria-pressed="true"] {
+    background: var(--text);
+    color: var(--bg);
+}
+
+.call-leave {
+    background: var(--danger);
+    border-color: var(--danger);
+    color: #fff;
+}
+
+.call-leave:hover {
+    background: var(--danger);
+    opacity: 0.85;
+}
+
+/* ==========================================================================
    Responsive
    ========================================================================== */
 
@@ -948,10 +1108,6 @@ label[for="profile-pic-input"] {
         max-width: 96px;
     }
 
-    .chat-header {
-        display: none;
-    }
-
     .thread {
         inset: 0;
         width: 100%;
@@ -980,234 +1136,20 @@ label[for="profile-pic-input"] {
         margin: 16px;
         padding: 20px;
     }
-}
 
-/* ==========================================================================
-   Shared whiteboards
-   Used by whiteboard.js for the chat card and expanded collaborative canvas.
-   ========================================================================== */
-.whiteboard-message-card {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    width: min(560px, 100%);
-    margin-top: 5px;
-    padding: 12px;
-    border: 1px solid var(--line-strong);
-    background: var(--surface);
-    cursor: pointer;
-    transition: border-color 0.15s ease, background-color 0.15s ease;
-}
-
-.whiteboard-message-card:hover,
-.whiteboard-message-card:focus-visible {
-    border-color: #44443f;
-    background: #080808;
-}
-
-.whiteboard-card-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    min-width: 0;
-}
-
-.whiteboard-card-title {
-    min-width: 0;
-    overflow: hidden;
-    color: var(--text);
-    font-size: 13px;
-    font-weight: 600;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.whiteboard-card-hint {
-    flex: none;
-    color: var(--text-muted);
-    font-size: 12px;
-}
-
-.whiteboard-card-preview {
-    display: block;
-    width: 100%;
-    aspect-ratio: 16 / 9;
-    overflow: hidden;
-    background-color: #050505;
-    border: 1px solid var(--line);
-}
-
-.whiteboard-card-preview canvas,
-.whiteboard-preview-canvas {
-    display: block;
-    width: 100%;
-    height: 100%;
-}
-
-.whiteboard-overlay,
-.whiteboard-modal,
-.whiteboard-expanded {
-    position: fixed;
-    inset: 0;
-    z-index: 10000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 18px;
-    background: rgba(0, 0, 0, 0.88);
-}
-
-.whiteboard-window,
-.whiteboard-panel {
-    display: flex;
-    flex-direction: column;
-    width: min(1100px, 100%);
-    max-height: min(92dvh, 900px);
-    min-height: 0;
-    overflow: hidden;
-    background: #050505;
-    border: 1px solid var(--line-strong);
-}
-
-.whiteboard-toolbar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-    padding: 10px;
-    border-bottom: 1px solid var(--line);
-    background: var(--surface);
-}
-
-.whiteboard-toolbar button,
-.whiteboard-toolbar select,
-.whiteboard-toolbar input,
-.whiteboard-controls button,
-.whiteboard-controls select,
-.whiteboard-controls input {
-    width: auto;
-    min-width: 0;
-    height: 32px;
-    margin: 0;
-    padding: 0 9px;
-    border: 1px solid var(--line-strong);
-    border-radius: var(--radius-sm);
-    background: #0b0b0b;
-    color: var(--text);
-    font: inherit;
-    font-size: 12px;
-}
-
-.whiteboard-toolbar button:hover,
-.whiteboard-controls button:hover {
-    opacity: 1;
-    border-color: #45453f;
-    background: #151515;
-}
-
-.whiteboard-toolbar button[aria-pressed="true"],
-.whiteboard-toolbar button.active,
-.whiteboard-controls button.active {
-    border-color: #55554e;
-    background: #20201e;
-    color: var(--text);
-}
-
-.whiteboard-toolbar input[type="color"],
-.whiteboard-controls input[type="color"] {
-    width: 34px;
-    padding: 3px;
-}
-
-.whiteboard-toolbar input[type="range"],
-.whiteboard-controls input[type="range"] {
-    width: 100px;
-    padding: 0;
-}
-
-.whiteboard-toolbar input[type="checkbox"],
-.whiteboard-controls input[type="checkbox"] {
-    width: 14px;
-    height: 14px;
-    margin: 0;
-    accent-color: var(--text);
-}
-
-.whiteboard-toolbar label,
-.whiteboard-controls label {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    color: var(--text-muted);
-    font-size: 12px;
-}
-
-.whiteboard-canvas-wrap,
-.whiteboard-canvas-container {
-    position: relative;
-    flex: 1;
-    min-height: 220px;
-    overflow: auto;
-    background: #050505;
-}
-
-.whiteboard-canvas,
-.whiteboard-drawing-canvas,
-.whiteboard-canvas-wrap canvas {
-    display: block;
-    max-width: 100%;
-    touch-action: none;
-    background: #050505;
-}
-
-.whiteboard-footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 9px 12px;
-    border-top: 1px solid var(--line);
-    color: var(--text-muted);
-    font-size: 12px;
-}
-
-.whiteboard-close,
-.whiteboard-leave,
-.whiteboard-clear {
-    width: auto;
-    margin: 0;
-}
-
-@media (max-width: 720px) {
-    .whiteboard-overlay,
-    .whiteboard-modal,
-    .whiteboard-expanded {
+    .call-overlay {
         padding: 0;
     }
 
-    .whiteboard-window,
-    .whiteboard-panel {
+    .call-window {
         width: 100%;
         height: 100%;
-        max-height: 100dvh;
+        border-radius: 0;
         border-left: 0;
         border-right: 0;
     }
 
-    .whiteboard-toolbar {
-        gap: 6px;
-        padding: 8px;
-    }
-
-    .whiteboard-toolbar button,
-    .whiteboard-toolbar select {
-        height: 30px;
-        padding: 0 7px;
-        font-size: 11px;
-    }
-
-    .whiteboard-toolbar input[type="range"] {
-        width: 72px;
+    .call-grid {
+        grid-template-columns: 1fr;
     }
 }

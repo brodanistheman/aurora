@@ -116,6 +116,8 @@ function setAvatar(img, src) {
 function applyUserData(userData) {
     if (userData.displayName) {
         currentDisplayName = userData.displayName;
+        // Exposed so call.js can show the right name in calls.
+        window.currentDisplayName = currentDisplayName;
     }
     currentProfilePic = isSafeImageSrc(userData.profilePic) ? userData.profilePic : defaultAvatar;
 
@@ -304,8 +306,10 @@ function messageTimestampMs(msg) {
     return msg.createdAt && msg.createdAt.toMillis ? msg.createdAt.toMillis() : Date.now();
 }
 
+// Skips thread replies, call messages, and empty messages (no text and no media).
 function isMainFeedMessage(msg) {
-    return !msg.threadId && msg.type !== 'call';
+    if (msg.threadId || msg.type === 'call') return false;
+    return Boolean(msg.text || msg.imageUrl || msg.videoUrl);
 }
 
 function buildMessageNode(msg, ms, inThread = false) {
@@ -318,22 +322,6 @@ function buildMessageNode(msg, ms, inThread = false) {
     const replyCount = Number(msg.replyCount) || 0;
 
     let contentHtml = '';
-
-    // Whiteboard messages render as clickable cards in the chat feed.
-    if (msg.type === 'whiteboard' && msg.whiteboardId) {
-        contentHtml += `
-            <button type="button"
-                class="whiteboard-message-card"
-                data-whiteboard-id="${escapeHtml(msg.whiteboardId)}"
-                aria-label="Join whiteboard">
-                <span class="whiteboard-card-header">
-                    <span class="whiteboard-card-title">Shared whiteboard</span>
-                    <span class="whiteboard-card-hint">Click to join</span>
-                </span>
-                <span class="whiteboard-card-preview" aria-hidden="true"></span>
-            </button>
-        `;
-    }
 
     if (msg.text) {
         contentHtml += `<span class="message-text">${formatMessageText(msg.text)}</span>`;
@@ -388,13 +376,6 @@ function buildMessageNode(msg, ms, inThread = false) {
 
     const editBtn = div.querySelector('.msg-edit-btn');
     if (editBtn) editBtn.addEventListener('click', () => enterEditMode(div, msg));
-
-    const whiteboardCard = div.querySelector('.whiteboard-message-card');
-    if (whiteboardCard) {
-        whiteboardCard.addEventListener('click', () => {
-            openWhiteboard(msg.whiteboardId);
-        });
-    }
 
     const threadBtn = div.querySelector('.msg-thread-btn');
     if (threadBtn) threadBtn.addEventListener('click', () => openThread(msg.id));
@@ -653,68 +634,6 @@ if (threadForm) {
     });
 }
 
-/* ---------- Shared whiteboards ---------- */
-
-async function createWhiteboard() {
-    const user = auth.currentUser;
-    if (!user) return;
-
-    setSending(true);
-
-    try {
-        const boardRef = await addDoc(collection(db, 'whiteboards'), {
-            ownerUid: user.uid,
-            ownerDisplayName: currentDisplayName,
-            title: `${currentDisplayName}'s whiteboard`,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp()
-        });
-
-        await addDoc(collection(db, 'messages'), {
-            uid: user.uid,
-            displayName: currentDisplayName,
-            profilePic: currentProfilePic,
-            text: '',
-            imageUrl: null,
-            videoUrl: null,
-            type: 'whiteboard',
-            whiteboardId: boardRef.id,
-            createdAt: serverTimestamp()
-        });
-
-        if (messageInput) messageInput.value = '';
-        if (messageBox) messageBox.scrollTop = messageBox.scrollHeight;
-    } catch (error) {
-        console.error('Error creating whiteboard:', error);
-        alert('Could not create the whiteboard. Check your Firestore rules and try again.');
-    } finally {
-        setSending(false);
-        if (messageInput) messageInput.focus();
-    }
-}
-
-function openWhiteboard(boardId) {
-    if (!boardId) return;
-
-    if (window.AuroraWhiteboard && typeof window.AuroraWhiteboard.open === 'function') {
-        window.AuroraWhiteboard.open(boardId);
-        return;
-    }
-
-    if (typeof window.openWhiteboard === 'function') {
-        window.openWhiteboard(boardId);
-        return;
-    }
-
-    window.dispatchEvent(new CustomEvent('aurora:open-whiteboard', {
-        detail: { boardId }
-    }));
-}
-
-function isWhiteboardCommand(text) {
-    return String(text || '').trim().toLowerCase() === '/whiteboard';
-}
-
 /* ---------- Sending ---------- */
 
 async function clearAllMessages() {
@@ -730,11 +649,6 @@ const MODERATOR_COMMANDS = {
 async function sendChatMessage(text, attachment = null) {
     const user = auth.currentUser;
     if (!user) return;
-
-    if (isWhiteboardCommand(text)) {
-        await createWhiteboard();
-        return;
-    }
 
     const command = text ? MODERATOR_COMMANDS[text.trim().toLowerCase()] : null;
     if (command) {
