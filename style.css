@@ -39,9 +39,6 @@ h1 {
     flex-direction: column;
     gap: 12px;
     margin-top: 32px;
-    padding: 20px;
-    border: 1px solid #202020;
-    border-radius: 5px;
 }
 
 .downtime span {
