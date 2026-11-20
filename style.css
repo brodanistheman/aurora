@@ -686,102 +686,98 @@ label[for="profile-pic-input"] {
     flex: none;
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 4px var(--gutter) var(--gutter);
+    gap: 10px;
+    margin: 4px var(--gutter) var(--gutter);
+    padding: 5px 6px 5px 10px;
+    background: #0b0b0b;
+    border: 1px solid #1c1c1c;
+    border-radius: 8px;
+    transition: border-color 0.15s ease;
+}
+
+.composer:focus-within {
+    border-color: #303030;
 }
 
 .composer input[type="text"] {
     flex: 1;
     min-width: 0;
-    height: 36px;
+    height: 34px;
     margin: 0;
-    padding: 0 12px;
-    background: var(--surface-raised);
-    border: 1px solid transparent;
-    border-radius: var(--radius);
-    font-size: 14px;
+    padding: 0 2px;
+    background: transparent;
+    border: 0;
+    outline: none;
+    border-radius: 0;
     color: var(--text);
+    font-size: 14px;
 }
 
 .composer input[type="text"]:focus {
-    border-color: var(--line-strong);
+    border: 0;
+    outline: none;
+}
+
+.composer input[type="text"]::placeholder {
+    color: #66665f;
 }
 
 .icon-btn {
     flex: none;
     display: grid;
     place-items: center;
-    width: 32px;
-    height: 32px;
+    width: 30px;
+    height: 30px;
     margin: 0;
     padding: 0;
     background: transparent;
     border: 0;
-    border-radius: var(--radius-sm);
-    color: var(--text-faint);
+    border-radius: 5px;
+    color: #777771;
     font-size: 14px;
-    transition: color 0.15s ease;
+    transition: color 0.15s ease, background 0.15s ease;
 }
 
 .icon-btn:hover {
-    background: transparent;
+    background: #171717;
     color: var(--text);
     opacity: 1;
 }
 
 .send-btn {
     flex: none;
-    width: auto;
-    height: 36px;
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 32px;
     margin: 0;
-    padding: 0 14px;
-    background: var(--text);
+    padding: 0;
+    background: #ededeb;
     border: 0;
-    border-radius: var(--radius);
-    color: var(--bg);
+    border-radius: 5px;
+    color: #080808;
+    font-size: 0;
+    transition: background 0.15s ease, opacity 0.15s ease;
+}
+
+.send-btn::before {
+    content: "\f1d8";
+    font-family: "Font Awesome 6 Free";
+    font-weight: 900;
     font-size: 13px;
-    font-weight: 600;
 }
 
-.thread {
-    flex: none;
-    display: flex;
-    flex-direction: column;
-    width: var(--thread-w);
-    min-height: 0;
-    background: var(--surface);
-    border-left: 1px solid var(--line);
+.send-btn:hover {
+    background: #ffffff;
+    opacity: 1;
 }
 
-.thread-root {
-    flex: none;
-    max-height: 40%;
-    overflow-y: auto;
-    padding: 8px var(--gutter);
-    scrollbar-width: thin;
-    scrollbar-color: var(--line-strong) transparent;
+.send-btn:disabled {
+    opacity: 0.35;
 }
 
-.thread-count {
-    flex: none;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 6px var(--gutter);
-    font-size: 11px;
-    font-weight: 500;
-    color: var(--text-faint);
-}
-
-.thread-count::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: var(--line);
-}
-
-.thread .composer input[type="text"] {
-    background: var(--surface-raised);
+.thread .composer {
+    background: #0b0b0b;
 }
 
 .image-modal {
