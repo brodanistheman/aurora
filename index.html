@@ -4,101 +4,104 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Aurora</title>
+    <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
-        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
-        import { getFirestore } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
-        import { loadAccount, resolveUidBySequentialId } from "./account-store.js";
+    <main class="Page">
+        <div class="AuthContainer">
+            <div class="Logo">Aurora</div>
 
-        const firebaseConfig = {
-            apiKey: "AIzaSyCLKCCpNbCs2AJm7g0JtGIjL43X5hr31N8",
-            authDomain: "aurora-9e0fe.firebaseapp.com",
-            projectId: "aurora-9e0fe",
-            storageBucket: "aurora-9e0fe.firebasestorage.app",
-            messagingSenderId: "1023486645506",
-            appId: "1:1023486645506:web:c64a98ebf0c3c817e01e1b",
-            measurementId: "G-3XVQTC189X"
-        };
+            <div class="AuthHeader">
+                <h1 id="AuthTitle">Sign In</h1>
+                <p id="AuthDescription">Welcome Back</p>
+            </div>
 
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
+            <div class="AuthTabs">
+                <button class="AuthTab Active" id="SignInTab" type="button">
+                    Sign In
+                </button>
 
-        function escapeHtml(str) {
-            if (str === null || str === undefined) return '';
-            return String(str)
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;')
-                .replace(/'/g, '&#039;');
-        }
+                <button class="AuthTab" id="SignUpTab" type="button">
+                    Sign Up
+                </button>
+            </div>
 
-        onAuthStateChanged(auth, (user) => {
-            if (!user) {
-                window.location.href = '/aurora/onboarding/';
-                return;
-            }
-
-            const urlParams = new URLSearchParams(window.location.search);
-            const customPath = urlParams.get('p');
-
-            if (customPath) {
-                if (customPath.startsWith('/settings')) {
-                    return;
-                }
-
-                const match = customPath.match(/^\/users\/([^\/]+)\/profile$/);
-                if (match) {
-                    loadProfileView(match[1]);
-                    return;
-                }
-            }
-
-            window.location.href = '/aurora/general/';
-        });
-
-        async function loadProfileView(sequentialId) {
-            renderProfileShell(sequentialId, 'Loading profile…');
-
-            const uid = await resolveUidBySequentialId(db, sequentialId);
-            if (!uid) {
-                renderProfileShell(sequentialId, 'This profile could not be found.');
-                return;
-            }
-
-            const { data } = await loadAccount(db, uid, {
-                onFresh: (fresh) => renderProfileDetails(sequentialId, fresh)
-            });
-
-            if (data) {
-                renderProfileDetails(sequentialId, data);
-            } else {
-                renderProfileShell(sequentialId, 'This profile could not be found.');
-            }
-        }
-
-        function renderProfileShell(sequentialId, statusText) {
-            document.body.innerHTML = `
-                <div style="background:#17171c; color:#fff; padding:40px; font-family:sans-serif;">
-                    <h2>User Profile: ${escapeHtml(sequentialId)}</h2>
-                    <p id="profile-status">${escapeHtml(statusText)}</p>
-                    <a href="/aurora/general/" style="color:#fff;">Back to General Chat</a>
+            <form id="SignInForm" class="AuthForm">
+                <div class="Field">
+                    <label for="SignInEmail">Email</label>
+                    <input
+                        id="SignInEmail"
+                        type="email"
+                        placeholder="Enter Your Email"
+                        autocomplete="email"
+                        required
+                    >
                 </div>
-            `;
-        }
 
-        function renderProfileDetails(sequentialId, userData) {
-            document.body.innerHTML = `
-                <div style="background:#17171c; color:#fff; padding:40px; font-family:sans-serif;">
-                    <h2>User Profile: ${escapeHtml(sequentialId)}</h2>
-                    <p>Display name: ${escapeHtml(userData.displayName || 'Anonymous')}</p>
-                    <a href="/aurora/general/" style="color:#fff;">Back to General Chat</a>
+                <div class="Field">
+                    <label for="SignInPassword">Password</label>
+                    <input
+                        id="SignInPassword"
+                        type="password"
+                        placeholder="Enter Your Password"
+                        autocomplete="current-password"
+                        required
+                    >
                 </div>
-            `;
-        }
-    </script>
+
+                <button class="SubmitButton" type="submit">
+                    Sign In
+                </button>
+            </form>
+
+            <form id="SignUpForm" class="AuthForm Hidden">
+                <div class="Field">
+                    <label for="SignUpUsername">Username</label>
+                    <input
+                        id="SignUpUsername"
+                        type="text"
+                        placeholder="Choose A Username"
+                        autocomplete="username"
+                        maxlength="20"
+                        required
+                    >
+                </div>
+
+                <div class="Field">
+                    <label for="SignUpEmail">Email</label>
+                    <input
+                        id="SignUpEmail"
+                        type="email"
+                        placeholder="Enter Your Email"
+                        autocomplete="email"
+                        required
+                    >
+                </div>
+
+                <div class="Field">
+                    <label for="SignUpPassword">Password</label>
+                    <input
+                        id="SignUpPassword"
+                        type="password"
+                        placeholder="Create A Password"
+                        autocomplete="new-password"
+                        minlength="6"
+                        required
+                    >
+                </div>
+
+                <button class="SubmitButton" type="submit">
+                    Create Account
+                </button>
+            </form>
+
+            <div class="AuthFooter">
+                <span id="AuthFooterText">Don't Have An Account?</span>
+                <button id="FooterToggle" type="button">Sign Up</button>
+            </div>
+        </div>
+    </main>
+
+    <script src="js/script.js"></script>
 </body>
 </html>
