@@ -5,6 +5,7 @@ import {
     getFirestore, doc, setDoc, collection, addDoc, query, orderBy, limit,
     startAfter, onSnapshot, serverTimestamp, getDocs, deleteDoc, updateDoc
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+import { loadAccount } from "../account-store.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyCLKCCpNbCs2AJm7g0JtGIjL43X5hr31N8",
@@ -45,9 +46,13 @@ const imageModalImg = document.getElementById('image-modal-img');
 const imageModalClose = document.getElementById('image-modal-close');
 
 let presenceInterval = null;
+let currentAccount = null;
+let currentDisplayName = '';
+let currentProfilePic = '';
 
 function escapeHtml(str) {
     if (str === null || str === undefined) return '';
+
     return String(str)
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
@@ -99,6 +104,11 @@ function formatTime(ms) {
     return `${date.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${time}`;
 }
 
+function getProfileImage(profilePic) {
+    if (isSafeImageSrc(profilePic)) return profilePic;
+    return '';
+}
+
 function setupPresence(user) {
     const userStatusRef = doc(db, "status", user.uid);
 
@@ -106,6 +116,8 @@ function setupPresence(user) {
         try {
             await setDoc(userStatusRef, {
                 uid: user.uid,
+                displayName: currentDisplayName,
+                profilePic: currentProfilePic,
                 status,
                 lastChanged: serverTimestamp()
             }, { merge: true });
@@ -125,6 +137,9 @@ function setupPresence(user) {
 
     window.addEventListener("beforeunload", () => {
         setDoc(userStatusRef, {
+            uid: user.uid,
+            displayName: currentDisplayName,
+            profilePic: currentProfilePic,
             status: 'offline',
             lastChanged: serverTimestamp()
         }, { merge: true });
@@ -147,12 +162,15 @@ function initOnlineUsersList() {
 
         snapshot.forEach((docSnap) => {
             const data = docSnap.data();
+
             if (data.status === 'offline') return;
+
             active.push(data);
         });
 
         active.sort((a, b) => {
             if (a.status !== b.status) return a.status === 'away' ? 1 : -1;
+            return 0;
         });
 
         if (onlineCount) {
@@ -170,9 +188,19 @@ function initOnlineUsersList() {
             const row = document.createElement('div');
             row.className = 'user-row';
 
+            const profilePic = getProfileImage(data.profilePic);
+
+            if (profilePic) {
+                const avatar = document.createElement('img');
+                avatar.className = 'user-avatar';
+                avatar.src = profilePic;
+                avatar.alt = '';
+                row.appendChild(avatar);
+            }
+
             const nameEl = document.createElement('span');
             nameEl.className = 'user-name';
-            nameEl.textContent = 'Anonymous';
+            nameEl.textContent = data.displayName || 'Anonymous';
 
             const dot = document.createElement('span');
             dot.className = `status ${isAway ? 'status-away' : 'status-online'}`;
@@ -302,6 +330,8 @@ function buildMessageNode(msg, ms) {
     div.dataset.ts = String(ms);
 
     const isOwn = !!(auth.currentUser && msg.uid === auth.currentUser.uid);
+    const displayName = msg.displayName || 'Anonymous';
+    const profilePic = getProfileImage(msg.profilePic);
 
     let contentHtml = '';
 
@@ -325,10 +355,15 @@ function buildMessageNode(msg, ms) {
         ? `<button type="button" class="msg-action msg-edit-btn" title="Edit" aria-label="Edit message"><i class="fa-solid fa-pen"></i></button>`
         : '';
 
+    const avatarHtml = profilePic
+        ? `<img class="message-avatar" src="${escapeHtml(profilePic)}" alt="">`
+        : '';
+
     div.innerHTML = `
         <div class="message-main">
             <div class="message-header">
-                <span class="message-name">Anonymous</span>
+                ${avatarHtml}
+                <span class="message-name">${escapeHtml(displayName)}</span>
                 <time class="message-time"></time>
                 <div class="message-actions">${editBtnHtml}</div>
             </div>
@@ -570,6 +605,8 @@ async function sendChatMessage(text, attachment = null) {
     try {
         await addDoc(collection(db, "messages"), {
             uid: user.uid,
+            displayName: currentDisplayName,
+            profilePic: currentProfilePic,
             text: text || '',
             imageUrl: attachment && attachment.type === 'image' ? attachment.url : null,
             videoUrl: attachment && attachment.type === 'video' ? attachment.url : null,
@@ -639,7 +676,7 @@ if (attachButton && imageInput) {
 
 if (messageInput) {
     messageInput.addEventListener('paste', (event) => {
-        const items = (event.clipboardData || event.originalEvent.clipboardData).items;
+        const items = event.clipboardData.items;
 
         for (const item of items) {
             if (
@@ -686,9 +723,29 @@ onAuthStateChanged(auth, async (user) => {
         return;
     }
 
-    setupPresence(user);
-    initOnlineUsersList();
-    initChat();
+    try {
+        currentAccount = await loadAccount(user);
+
+        currentDisplayName = currentAccount?.displayName || user.displayName || user.email?.split('@')[0] || 'Anonymous';
+        currentProfilePic = currentAccount?.profilePic || '';
+
+        window.currentDisplayName = currentDisplayName;
+
+        setupPresence(user);
+        initOnlineUsersList();
+        initChat();
+    } catch (error) {
+        console.error("Error loading account:", error);
+
+        currentDisplayName = user.displayName || user.email?.split('@')[0] || 'Anonymous';
+        currentProfilePic = '';
+
+        window.currentDisplayName = currentDisplayName;
+
+        setupPresence(user);
+        initOnlineUsersList();
+        initChat();
+    }
 });
 
 if (logoutButton) {
@@ -697,6 +754,9 @@ if (logoutButton) {
 
         if (user) {
             await setDoc(doc(db, "status", user.uid), {
+                uid: user.uid,
+                displayName: currentDisplayName,
+                profilePic: currentProfilePic,
                 status: 'offline',
                 lastChanged: serverTimestamp()
             }, { merge: true });
