@@ -59,6 +59,46 @@ h1 {
     font-size: 12px;
 }
 
+.drawing-section {
+    margin-top: 36px;
+    text-align: left;
+}
+
+.drawing-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.drawing-header span {
+    color: #777;
+    font-size: 11px;
+}
+
+.drawing-header button {
+    border: none;
+    background: transparent;
+    color: #777;
+    font-family: inherit;
+    font-size: 11px;
+    cursor: pointer;
+    transition: color 0.2s ease;
+}
+
+.drawing-header button:hover {
+    color: #fff;
+}
+
+#drawingCanvas {
+    display: block;
+    width: 100%;
+    height: 200px;
+    background: #080808;
+    cursor: crosshair;
+    touch-action: none;
+}
+
 @media (max-width: 480px) {
     h1 {
         font-size: 21px;

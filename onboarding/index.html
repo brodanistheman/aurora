@@ -27,6 +27,16 @@
         <p class="notice">
             You'll Have To Sign Up Again After Maintenance.
         </p>
+
+        <section class="drawing-section">
+            <div class="drawing-header">
+                <span>Drawing Canvas</span>
+
+                <button type="button" id="clearCanvas">Clear</button>
+            </div>
+
+            <canvas id="drawingCanvas"></canvas>
+        </section>
     </main>
 
     <script>
@@ -46,6 +56,131 @@
 
         updateDowntime();
         setInterval(updateDowntime, 1000);
+
+        const canvas = document.getElementById("drawingCanvas");
+        const context = canvas.getContext("2d");
+        const clearButton = document.getElementById("clearCanvas");
+
+        const storageKey = "maintenanceDrawing";
+
+        let drawing = false;
+        let lastX = 0;
+        let lastY = 0;
+
+        function resizeCanvas() {
+            const savedDrawing = localStorage.getItem(storageKey);
+            const previousWidth = canvas.width;
+            const previousHeight = canvas.height;
+
+            const image = savedDrawing ? new Image() : null;
+
+            canvas.width = canvas.clientWidth * window.devicePixelRatio;
+            canvas.height = canvas.clientHeight * window.devicePixelRatio;
+
+            context.setTransform(
+                window.devicePixelRatio,
+                0,
+                0,
+                window.devicePixelRatio,
+                0,
+                0
+            );
+
+            context.lineWidth = 2;
+            context.lineCap = "round";
+            context.lineJoin = "round";
+            context.strokeStyle = "#ffffff";
+
+            if (image) {
+                image.onload = () => {
+                    context.drawImage(
+                        image,
+                        0,
+                        0,
+                        canvas.clientWidth,
+                        canvas.clientHeight
+                    );
+                };
+
+                image.src = savedDrawing;
+            }
+        }
+
+        function saveDrawing() {
+            try {
+                localStorage.setItem(storageKey, canvas.toDataURL("image/png"));
+            } catch (error) {
+                console.warn("Unable to save drawing.");
+            }
+        }
+
+        function getPosition(event) {
+            const rect = canvas.getBoundingClientRect();
+
+            return {
+                x: event.clientX - rect.left,
+                y: event.clientY - rect.top
+            };
+        }
+
+        function startDrawing(event) {
+            event.preventDefault();
+
+            drawing = true;
+
+            const position = getPosition(event);
+
+            lastX = position.x;
+            lastY = position.y;
+
+            canvas.setPointerCapture(event.pointerId);
+
+            context.beginPath();
+            context.moveTo(lastX, lastY);
+        }
+
+        function draw(event) {
+            if (!drawing) return;
+
+            event.preventDefault();
+
+            const position = getPosition(event);
+
+            context.beginPath();
+            context.moveTo(lastX, lastY);
+            context.lineTo(position.x, position.y);
+            context.stroke();
+
+            lastX = position.x;
+            lastY = position.y;
+        }
+
+        function stopDrawing() {
+            if (!drawing) return;
+
+            drawing = false;
+            saveDrawing();
+        }
+
+        canvas.addEventListener("pointerdown", startDrawing);
+        canvas.addEventListener("pointermove", draw);
+        canvas.addEventListener("pointerup", stopDrawing);
+        canvas.addEventListener("pointercancel", stopDrawing);
+        canvas.addEventListener("lostpointercapture", stopDrawing);
+
+        clearButton.addEventListener("click", () => {
+            context.clearRect(0, 0, canvas.width, canvas.height);
+            localStorage.removeItem(storageKey);
+        });
+
+        let resizeTimeout;
+
+        window.addEventListener("resize", () => {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(resizeCanvas, 150);
+        });
+
+        resizeCanvas();
     </script>
 </body>
 </html>
