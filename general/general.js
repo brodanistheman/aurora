@@ -1,12 +1,23 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
 import {
-    getFirestore, doc, setDoc, collection, addDoc, query, where, orderBy, limit,
-    startAfter, onSnapshot, serverTimestamp, getDocs, deleteDoc, updateDoc, increment
+    getFirestore,
+    doc,
+    collection,
+    addDoc,
+    query,
+    orderBy,
+    limit,
+    startAfter,
+    onSnapshot,
+    serverTimestamp,
+    getDocs,
+    deleteDoc,
+    updateDoc
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
-import { loadAccount, updateAccount } from "../account-store.js";
+import { loadAccount } from "../account-store.js";
 
-const firebaseConfig = {
+const FirebaseConfig = {
     apiKey: "AIzaSyCLKCCpNbCs2AJm7g0JtGIjL43X5hr31N8",
     authDomain: "aurora-9e0fe.firebaseapp.com",
     projectId: "aurora-9e0fe",
@@ -16,244 +27,168 @@ const firebaseConfig = {
     measurementId: "G-3XVQTC189X"
 };
 
-const MODERATOR_UIDS = [
+const ModeratorUids = [
     "AQ1oLVW0fNgESU0H5GEvcycxYJ73",
     "IW24TCbQSkamV2LdxSFObbBg9u73"
 ];
 
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-const MAX_VIDEO_BYTES = 4 * 1024 * 1024;
-const SCROLL_NEAR_BOTTOM_PX = 80;
-const SCROLL_NEAR_TOP_PX = 60;
-const MESSAGE_PAGE_SIZE = 30;
+const ImageKitAuthUrl = "https://aurora-imagekit-auth.4dapple.workers.dev/auth";
+const ImageKitUploadUrl = "https://upload.imagekit.io/api/v1/files/upload";
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+const MaxImageBytes = 25 * 1024 * 1024;
+const MaxVideoBytes = 35 * 1024 * 1024;
+const ScrollNearBottomPx = 80;
+const ScrollNearTopPx = 60;
+const MessagePageSize = 30;
 
-const logoutButton = document.getElementById('logout-button');
-const settingsButton = document.getElementById('settings-button');
-const profileButton = document.getElementById('profile-button');
-const messageBox = document.getElementById('message-box');
-const messageForm = document.getElementById('message-form');
-const messageInput = document.getElementById('message-input');
-const sendButton = document.getElementById('send-button');
-const imageInput = document.getElementById('image-file-input');
-const attachButton = document.getElementById('attach-button');
-const onlineUsersList = document.getElementById('online-users-list');
-const onlineCount = document.getElementById('online-count');
-const imageModal = document.getElementById('image-modal');
-const imageModalImg = document.getElementById('image-modal-img');
-const imageModalClose = document.getElementById('image-modal-close');
+const App = initializeApp(FirebaseConfig);
+const Auth = getAuth(App);
+const Db = getFirestore(App);
 
-const threadPanel = document.getElementById('thread-panel');
-const threadClose = document.getElementById('thread-close');
-const threadRoot = document.getElementById('thread-root');
-const threadCount = document.getElementById('thread-count');
-const threadBox = document.getElementById('thread-box');
-const threadForm = document.getElementById('thread-form');
-const threadInput = document.getElementById('thread-input');
-const threadSend = document.getElementById('thread-send');
+const LogoutButton = document.getElementById("logout-button");
+const MessageBox = document.getElementById("message-box");
+const MessageForm = document.getElementById("message-form");
+const MessageInput = document.getElementById("message-input");
+const SendButton = document.getElementById("send-button");
+const ImageInput = document.getElementById("image-file-input");
+const AttachButton = document.getElementById("attach-button");
+const ImageModal = document.getElementById("image-modal");
+const ImageModalImg = document.getElementById("image-modal-img");
+const ImageModalClose = document.getElementById("image-modal-close");
 
-const defaultAvatar = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2366665f'><path d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z'/></svg>";
+const DefaultAvatar = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2366665f'><path d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z'/></svg>";
 
-let currentDisplayName = 'Anonymous';
-let currentProfilePic = '';
-let presenceInterval = null;
+let CurrentDisplayName = "Anonymous";
+let CurrentProfilePic = DefaultAvatar;
+let IsSending = false;
 
-function escapeHtml(str) {
-    if (str === null || str === undefined) return '';
-    return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
+function EscapeHtml(Value) {
+    if (Value === null || Value === undefined) return "";
+
+    return String(Value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
 }
 
-function isSafeMediaSrc(src, kind) {
-    if (!src) return false;
-    if (src.startsWith('https://') || src.startsWith('http://')) return true;
-    return src.startsWith(`data:${kind}/`);
-}
+function IsSafeMediaSrc(Src, Kind) {
+    if (!Src) return false;
 
-function isSafeImageSrc(src) {
-    return isSafeMediaSrc(src, 'image');
-}
-
-function isSafeVideoSrc(src) {
-    return isSafeMediaSrc(src, 'video');
-}
-
-function formatMessageText(text) {
-    if (!text) return '';
-    const escaped = escapeHtml(text);
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    return escaped.replace(urlRegex, (url) => {
-        const safeUrl = escapeHtml(url);
-        return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeUrl}</a>`;
-    });
-}
-
-function formatTime(ms) {
-    const date = new Date(ms);
-    const now = new Date();
-    const time = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-    if (date.toDateString() === now.toDateString()) return time;
-
-    const yesterday = new Date(now);
-    yesterday.setDate(now.getDate() - 1);
-    if (date.toDateString() === yesterday.toDateString()) return `Yesterday ${time}`;
-
-    return `${date.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${time}`;
-}
-
-function setAvatar(img, src) {
-    img.addEventListener('error', () => { img.src = defaultAvatar; }, { once: true });
-    img.src = isSafeImageSrc(src) ? src : defaultAvatar;
-}
-
-function applyUserData(userData) {
-    if (userData.displayName) {
-        currentDisplayName = userData.displayName;
-        // Exposed so call.js can show the right name in calls.
-        window.currentDisplayName = currentDisplayName;
-    }
-    currentProfilePic = isSafeImageSrc(userData.profilePic) ? userData.profilePic : defaultAvatar;
-
-    if (profileButton && userData.sequentialId) {
-        profileButton.onclick = () => {
-            window.location.href = `/aurora/users/${encodeURIComponent(userData.sequentialId)}/profile/`;
-        };
+    try {
+        const Url = new URL(Src);
+        return Url.protocol === "https:" || Url.protocol === "http:";
+    } catch {
+        return typeof Src === "string" && Src.startsWith(`data:${Kind}/`);
     }
 }
 
-function setupPresence(user) {
-    const userStatusRef = doc(db, "status", user.uid);
-
-    const updateStatus = async (status) => {
-        try {
-            await setDoc(userStatusRef, {
-                uid: user.uid,
-                displayName: currentDisplayName,
-                profilePic: currentProfilePic,
-                status,
-                lastChanged: serverTimestamp()
-            }, { merge: true });
-        } catch (err) {
-            console.error("Error updating presence:", err);
-        }
-    };
-
-    updateStatus('online');
-
-    document.addEventListener("visibilitychange", () => {
-        updateStatus(document.hidden ? 'away' : 'online');
-    });
-    window.addEventListener("blur", () => updateStatus('away'));
-    window.addEventListener("focus", () => updateStatus('online'));
-    window.addEventListener("beforeunload", () => {
-        setDoc(userStatusRef, { status: 'offline', lastChanged: serverTimestamp() }, { merge: true });
-    });
-
-    presenceInterval = setInterval(() => {
-        if (!document.hidden) updateStatus('online');
-    }, 30000);
+function IsSafeImageSrc(Src) {
+    return IsSafeMediaSrc(Src, "image");
 }
 
-function initOnlineUsersList() {
-    if (!onlineUsersList) return;
-    const statusQuery = collection(db, "status");
+function IsSafeVideoSrc(Src) {
+    return IsSafeMediaSrc(Src, "video");
+}
 
-    onSnapshot(statusQuery, (snapshot) => {
-        onlineUsersList.innerHTML = '';
+function FormatMessageText(Value) {
+    if (!Value) return "";
 
-        const active = [];
-        snapshot.forEach((docSnap) => {
-            const data = docSnap.data();
-            if (data.status === 'offline') return;
-            active.push(data);
-        });
+    const Escaped = EscapeHtml(Value);
+    const UrlRegex = /(https?:\/\/[^\s]+)/g;
 
-        active.sort((a, b) => {
-            if (a.status !== b.status) return a.status === 'away' ? 1 : -1;
-            return String(a.displayName || '').localeCompare(String(b.displayName || ''));
-        });
-
-        if (onlineCount) onlineCount.textContent = active.length ? `· ${active.length}` : '';
-
-        if (!active.length) {
-            onlineUsersList.innerHTML = '<p class="empty-state">No one is online.</p>';
-            return;
-        }
-
-        active.forEach((data) => {
-            const isAway = data.status === 'away';
-            const name = data.displayName || 'Anonymous';
-
-            const row = document.createElement('div');
-            row.className = 'user-row';
-
-            const avatar = document.createElement('img');
-            avatar.className = 'user-avatar';
-            avatar.alt = '';
-            setAvatar(avatar, data.profilePic);
-
-            const nameEl = document.createElement('span');
-            nameEl.className = 'user-name';
-            nameEl.title = name;
-            nameEl.textContent = name;
-
-            const dot = document.createElement('span');
-            dot.className = `status ${isAway ? 'status-away' : 'status-online'}`;
-            dot.title = isAway ? 'Away' : 'Online';
-
-            row.append(avatar, nameEl, dot);
-            onlineUsersList.appendChild(row);
-        });
+    return Escaped.replace(UrlRegex, (Url) => {
+        const SafeUrl = EscapeHtml(Url);
+        return `<a href="${SafeUrl}" target="_blank" rel="noopener noreferrer">${SafeUrl}</a>`;
     });
 }
 
-function openLightbox(imgSrc) {
-    if (!imageModal || !imageModalImg) return;
-    imageModalImg.src = imgSrc;
-    imageModal.classList.remove('hidden');
+function FormatTime(Milliseconds) {
+    const DateValue = new Date(Milliseconds);
+    const Now = new Date();
+    const Time = DateValue.toLocaleTimeString([], {
+        hour: "numeric",
+        minute: "2-digit"
+    });
+
+    if (DateValue.toDateString() === Now.toDateString()) return Time;
+
+    const Yesterday = new Date(Now);
+    Yesterday.setDate(Now.getDate() - 1);
+
+    if (DateValue.toDateString() === Yesterday.toDateString()) {
+        return `Yesterday ${Time}`;
+    }
+
+    return `${DateValue.toLocaleDateString([], {
+        month: "short",
+        day: "numeric"
+    })} ${Time}`;
 }
 
-function closeLightbox() {
-    if (!imageModal) return;
-    imageModal.classList.add('hidden');
-    if (imageModalImg) imageModalImg.src = '';
+function SetAvatar(Image, Src) {
+    Image.addEventListener("error", () => {
+        Image.src = DefaultAvatar;
+    }, { once: true });
+
+    Image.src = IsSafeImageSrc(Src) ? Src : DefaultAvatar;
 }
 
-if (imageModalClose) imageModalClose.addEventListener('click', closeLightbox);
-if (imageModal) {
-    imageModal.addEventListener('click', (e) => {
-        if (e.target === imageModal) closeLightbox();
+function ApplyUserData(UserData) {
+    if (UserData?.displayName) {
+        CurrentDisplayName = UserData.displayName;
+    }
+
+    CurrentProfilePic = IsSafeImageSrc(UserData?.profilePic)
+        ? UserData.profilePic
+        : DefaultAvatar;
+}
+
+function OpenLightbox(ImageSrc) {
+    if (!ImageModal || !ImageModalImg) return;
+
+    ImageModalImg.src = ImageSrc;
+    ImageModal.classList.remove("hidden");
+}
+
+function CloseLightbox() {
+    if (!ImageModal) return;
+
+    ImageModal.classList.add("hidden");
+
+    if (ImageModalImg) ImageModalImg.src = "";
+}
+
+if (ImageModalClose) {
+    ImageModalClose.addEventListener("click", CloseLightbox);
+}
+
+if (ImageModal) {
+    ImageModal.addEventListener("click", (Event) => {
+        if (Event.target === ImageModal) CloseLightbox();
     });
 }
 
-document.addEventListener('keydown', (e) => {
-    if (e.key !== 'Escape') return;
-    if (imageModal && !imageModal.classList.contains('hidden')) {
-        closeLightbox();
-    } else if (activeThreadId && !document.activeElement.classList.contains('edit-input')) {
-        closeThread();
+document.addEventListener("keydown", (Event) => {
+    if (Event.key === "Escape" && ImageModal && !ImageModal.classList.contains("hidden")) {
+        CloseLightbox();
     }
 });
 
-function isScrolledNearBottom(el) {
-    return el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_NEAR_BOTTOM_PX;
+function IsScrolledNearBottom(Element) {
+    return Element.scrollHeight - Element.scrollTop - Element.clientHeight < ScrollNearBottomPx;
 }
 
-function enterEditMode(div, msg) {
-    const body = div.querySelector('.message-body');
-    if (!body || body.querySelector('.edit-form')) return;
+function EnterEditMode(Element, Message) {
+    const Body = Element.querySelector(".message-body");
+    if (!Body || Body.querySelector(".edit-form")) return;
 
-    const original = body.innerHTML;
-    body.innerHTML = `
+    const OriginalHtml = Body.innerHTML;
+
+    Body.innerHTML = `
         <div class="edit-form">
-            <input type="text" class="edit-input" value="${escapeHtml(msg.text || '')}">
+            <input type="text" class="edit-input" value="${EscapeHtml(Message.text || "")}">
             <div class="edit-actions">
                 <button type="button" class="edit-save">Save</button>
                 <button type="button" class="edit-cancel">Cancel</button>
@@ -261,567 +196,600 @@ function enterEditMode(div, msg) {
         </div>
     `;
 
-    const input = body.querySelector('.edit-input');
-    const cancel = () => { body.innerHTML = original; };
-    const save = async () => {
-        const newText = input.value.trim();
-        if (!newText) return;
-        if (newText === msg.text) {
-            cancel();
+    const Input = Body.querySelector(".edit-input");
+    const Cancel = () => {
+        Body.innerHTML = OriginalHtml;
+    };
+
+    const Save = async () => {
+        const NewText = Input.value.trim();
+
+        if (!NewText) return;
+
+        if (NewText === Message.text) {
+            Cancel();
             return;
         }
+
         try {
-            await updateDoc(doc(db, 'messages', msg.id), { text: newText, edited: true });
-        } catch (err) {
-            console.error('Error editing message:', err);
-            alert('Could not save your edit. Please try again.');
+            await updateDoc(doc(Db, "messages", Message.id), {
+                text: NewText,
+                edited: true
+            });
+        } catch (Error) {
+            console.error("Message Edit Failed:", Error);
+            alert("Could Not Save Your Edit. Please Try Again.");
         }
     };
 
-    body.querySelector('.edit-save').addEventListener('click', save);
-    body.querySelector('.edit-cancel').addEventListener('click', cancel);
-    input.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter') save();
-        if (event.key === 'Escape') {
-            event.stopPropagation();
-            cancel();
+    Body.querySelector(".edit-save").addEventListener("click", Save);
+    Body.querySelector(".edit-cancel").addEventListener("click", Cancel);
+
+    Input.addEventListener("keydown", (Event) => {
+        if (Event.key === "Enter") Save();
+
+        if (Event.key === "Escape") {
+            Event.stopPropagation();
+            Cancel();
         }
     });
-    input.focus();
-    input.setSelectionRange(input.value.length, input.value.length);
+
+    Input.focus();
+    Input.setSelectionRange(Input.value.length, Input.value.length);
 }
 
-const messageElements = new Map();
-const messageData = new Map();
-let oldestMessageDoc = null;
-let paginationStarted = false;
-let hasMoreOlderMessages = true;
-let loadingOlderMessages = false;
-const paginatedMessageIds = new Set();
+const MessageElements = new Map();
+const MessageData = new Map();
 
-let activeThreadId = null;
-let threadUnsub = null;
+let OldestMessageDoc = null;
+let PaginationStarted = false;
+let HasMoreOlderMessages = true;
+let IsLoadingOlderMessages = false;
 
-function messageTimestampMs(msg) {
-    return msg.createdAt && msg.createdAt.toMillis ? msg.createdAt.toMillis() : Date.now();
+function MessageTimestampMs(Message) {
+    return Message.createdAt?.toMillis
+        ? Message.createdAt.toMillis()
+        : Date.now();
 }
 
-// Skips thread replies and empty messages. Call announcements are kept: call.js
-// fills their .call-widget-slot with the live widget.
-function isMainFeedMessage(msg) {
-    if (msg.threadId) return false;
-    if (msg.type === 'call') return Boolean(msg.callId);
-    return Boolean(msg.text || msg.imageUrl || msg.videoUrl);
+function IsMainFeedMessage(Message) {
+    return Boolean(Message.text || Message.imageUrl || Message.videoUrl);
 }
 
-function buildMessageNode(msg, ms, inThread = false) {
-    const div = document.createElement('div');
-    div.className = 'message';
-    div.dataset.messageId = msg.id;
-    div.dataset.ts = String(ms);
+function BuildMessageNode(Message, Milliseconds) {
+    const Element = document.createElement("div");
+    Element.className = "message";
+    Element.dataset.messageId = Message.id;
+    Element.dataset.ts = String(Milliseconds);
 
-    const isOwn = !!(auth.currentUser && msg.uid === auth.currentUser.uid);
-    const isCall = msg.type === 'call';
-    const replyCount = Number(msg.replyCount) || 0;
+    const IsOwn = Boolean(Auth.currentUser && Message.uid === Auth.currentUser.uid);
+    let ContentHtml = "";
 
-    let contentHtml = '';
+    if (Message.text) {
+        ContentHtml += `<span class="message-text">${FormatMessageText(Message.text)}</span>`;
 
-    if (isCall) {
-        contentHtml += `<div class="call-widget-slot" data-call-id="${escapeHtml(msg.callId)}"></div>`;
-    }
-    if (msg.text) {
-        contentHtml += `<span class="message-text">${formatMessageText(msg.text)}</span>`;
-        if (msg.edited) contentHtml += `<span class="edited-tag"> (edited)</span>`;
-    }
-    if (msg.imageUrl && isSafeImageSrc(msg.imageUrl)) {
-        contentHtml += `<div class="message-media"><img class="message-image" alt="Attached image"></div>`;
-    }
-    if (msg.videoUrl && isSafeVideoSrc(msg.videoUrl)) {
-        contentHtml += `<div class="message-media"><video class="message-video" controls preload="metadata"></video></div>`;
+        if (Message.edited) {
+            ContentHtml += `<span class="edited-tag"> (edited)</span>`;
+        }
     }
 
-    const threadBtnHtml = (inThread || isCall)
-        ? ''
-        : `<button type="button" class="msg-action msg-thread-btn" title="Reply in thread" aria-label="Reply in thread"><i class="fa-regular fa-comment"></i></button>`;
-    const editBtnHtml = (isOwn && msg.text && !isCall)
+    if (Message.imageUrl && IsSafeImageSrc(Message.imageUrl)) {
+        ContentHtml += `<div class="message-media"><img class="message-image" alt="Attached image"></div>`;
+    }
+
+    if (Message.videoUrl && IsSafeVideoSrc(Message.videoUrl)) {
+        ContentHtml += `<div class="message-media"><video class="message-video" controls preload="metadata"></video></div>`;
+    }
+
+    const EditButtonHtml = IsOwn && Message.text
         ? `<button type="button" class="msg-action msg-edit-btn" title="Edit" aria-label="Edit message"><i class="fa-solid fa-pen"></i></button>`
-        : '';
+        : "";
 
-    const repliesHtml = (!inThread && !isCall && replyCount > 0)
-        ? `<button type="button" class="thread-link"><i class="fa-regular fa-comment"></i>${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}</button>`
-        : '';
-
-    div.innerHTML = `
+    Element.innerHTML = `
         <img class="message-avatar" alt="">
         <div class="message-main">
             <div class="message-header">
-                <span class="message-name">${escapeHtml(msg.displayName || 'Anonymous')}</span>
+                <span class="message-name">${EscapeHtml(Message.displayName || "Anonymous")}</span>
                 <time class="message-time"></time>
-                <div class="message-actions">${threadBtnHtml}${editBtnHtml}</div>
+                <div class="message-actions">${EditButtonHtml}</div>
             </div>
-            <div class="message-body">${contentHtml}</div>
-            ${repliesHtml}
+            <div class="message-body">${ContentHtml}</div>
         </div>
     `;
 
-    setAvatar(div.querySelector('.message-avatar'), msg.profilePic);
+    SetAvatar(Element.querySelector(".message-avatar"), Message.profilePic);
 
-    const time = div.querySelector('.message-time');
-    time.textContent = formatTime(ms);
-    time.dateTime = new Date(ms).toISOString();
-    time.title = new Date(ms).toLocaleString();
+    const TimeElement = Element.querySelector(".message-time");
+    TimeElement.textContent = FormatTime(Milliseconds);
+    TimeElement.dateTime = new Date(Milliseconds).toISOString();
+    TimeElement.title = new Date(Milliseconds).toLocaleString();
 
-    const image = div.querySelector('.message-image');
-    if (image) {
-        image.src = msg.imageUrl;
-        image.addEventListener('click', () => openLightbox(image.src));
+    const Image = Element.querySelector(".message-image");
+
+    if (Image) {
+        Image.src = Message.imageUrl;
+        Image.addEventListener("click", () => OpenLightbox(Image.src));
     }
 
-    const video = div.querySelector('.message-video');
-    if (video) video.src = msg.videoUrl;
+    const Video = Element.querySelector(".message-video");
+    if (Video) Video.src = Message.videoUrl;
 
-    const editBtn = div.querySelector('.msg-edit-btn');
-    if (editBtn) editBtn.addEventListener('click', () => enterEditMode(div, msg));
+    const EditButton = Element.querySelector(".msg-edit-btn");
 
-    const threadBtn = div.querySelector('.msg-thread-btn');
-    if (threadBtn) threadBtn.addEventListener('click', () => openThread(msg.id));
+    if (EditButton) {
+        EditButton.addEventListener("click", () => EnterEditMode(Element, Message));
+    }
 
-    const threadLink = div.querySelector('.thread-link');
-    if (threadLink) threadLink.addEventListener('click', () => openThread(msg.id));
-
-    return div;
+    return Element;
 }
 
-function insertMessageNode(node, ms) {
-    const nodes = messageBox.querySelectorAll('[data-message-id]');
-    for (const existing of nodes) {
-        if (ms < Number(existing.dataset.ts || 0)) {
-            messageBox.insertBefore(node, existing);
+function InsertMessageNode(Node, Milliseconds) {
+    const ExistingNodes = MessageBox.querySelectorAll("[data-message-id]");
+
+    for (const Existing of ExistingNodes) {
+        if (Milliseconds < Number(Existing.dataset.ts || 0)) {
+            MessageBox.insertBefore(Node, Existing);
             return;
         }
     }
-    messageBox.appendChild(node);
+
+    MessageBox.appendChild(Node);
 }
 
-function upsertMessageElement(msg) {
-    const ms = messageTimestampMs(msg);
-    messageData.set(msg.id, msg);
+function UpsertMessageElement(Message) {
+    const Milliseconds = MessageTimestampMs(Message);
+    MessageData.set(Message.id, Message);
 
-    const existing = messageElements.get(msg.id);
-    if (existing) {
-        const rebuilt = buildMessageNode(msg, ms);
-        existing.replaceWith(rebuilt);
-        messageElements.set(msg.id, rebuilt);
+    const Existing = MessageElements.get(Message.id);
+
+    if (Existing) {
+        const Rebuilt = BuildMessageNode(Message, Milliseconds);
+        Existing.replaceWith(Rebuilt);
+        MessageElements.set(Message.id, Rebuilt);
     } else {
-        const node = buildMessageNode(msg, ms);
-        messageElements.set(msg.id, node);
-        insertMessageNode(node, ms);
-    }
-
-    if (msg.id === activeThreadId) renderThreadRoot();
-}
-
-function removeMessageElement(id) {
-    if (paginatedMessageIds.has(id)) return;
-    const node = messageElements.get(id);
-    if (node) node.remove();
-    messageElements.delete(id);
-}
-
-function refreshEmptyState() {
-    const emptyState = messageBox.querySelector('.empty-state');
-    if (messageElements.size === 0) {
-        if (!emptyState) messageBox.innerHTML = '<p class="empty-state">No messages yet.</p>';
-    } else if (emptyState) {
-        emptyState.remove();
+        const Node = BuildMessageNode(Message, Milliseconds);
+        MessageElements.set(Message.id, Node);
+        InsertMessageNode(Node, Milliseconds);
     }
 }
 
-async function loadOlderMessages() {
-    if (loadingOlderMessages || !hasMoreOlderMessages || !oldestMessageDoc) return;
-    loadingOlderMessages = true;
-    paginationStarted = true;
-    let added = 0;
+function RemoveMessageElement(Id) {
+    const Element = MessageElements.get(Id);
+
+    if (Element) Element.remove();
+
+    MessageElements.delete(Id);
+    MessageData.delete(Id);
+}
+
+function RefreshEmptyState() {
+    const EmptyState = MessageBox.querySelector(".empty-state");
+
+    if (MessageElements.size === 0) {
+        if (!EmptyState) {
+            MessageBox.innerHTML = '<p class="empty-state">No messages yet.</p>';
+        }
+    } else if (EmptyState) {
+        EmptyState.remove();
+    }
+}
+
+async function LoadOlderMessages() {
+    if (
+        IsLoadingOlderMessages ||
+        !HasMoreOlderMessages ||
+        !OldestMessageDoc ||
+        !MessageBox
+    ) {
+        return;
+    }
+
+    IsLoadingOlderMessages = true;
+    PaginationStarted = true;
+    let AddedCount = 0;
 
     try {
-        const q = query(
-            collection(db, 'messages'),
-            orderBy('createdAt', 'desc'),
-            startAfter(oldestMessageDoc),
-            limit(MESSAGE_PAGE_SIZE)
+        const MessageQuery = query(
+            collection(Db, "messages"),
+            orderBy("createdAt", "desc"),
+            startAfter(OldestMessageDoc),
+            limit(MessagePageSize)
         );
-        const snap = await getDocs(q);
 
-        if (snap.empty) {
-            hasMoreOlderMessages = false;
+        const Snapshot = await getDocs(MessageQuery);
+
+        if (Snapshot.empty) {
+            HasMoreOlderMessages = false;
             return;
         }
 
-        oldestMessageDoc = snap.docs[snap.docs.length - 1];
-        const previousHeight = messageBox.scrollHeight;
+        OldestMessageDoc = Snapshot.docs[Snapshot.docs.length - 1];
 
-        [...snap.docs].reverse().forEach((docSnap) => {
-            const msg = { id: docSnap.id, ...docSnap.data() };
-            if (!isMainFeedMessage(msg)) return;
-            if (messageElements.has(msg.id)) return;
-            paginatedMessageIds.add(msg.id);
-            messageData.set(msg.id, msg);
-            const ms = messageTimestampMs(msg);
-            const node = buildMessageNode(msg, ms);
-            messageElements.set(msg.id, node);
-            messageBox.insertBefore(node, messageBox.firstChild);
-            added += 1;
-        });
-
-        messageBox.scrollTop += messageBox.scrollHeight - previousHeight;
-    } catch (err) {
-        console.error('Error loading older messages:', err);
-        added = 1;
-    } finally {
-        loadingOlderMessages = false;
-    }
-
-    if (added === 0 && hasMoreOlderMessages) loadOlderMessages();
-}
-
-function handleScrollForOlderMessages() {
-    if (messageBox.scrollTop < SCROLL_NEAR_TOP_PX) loadOlderMessages();
-}
-
-function initChat() {
-    if (!messageBox) return;
-
-    const q = query(collection(db, 'messages'), orderBy('createdAt', 'desc'), limit(MESSAGE_PAGE_SIZE));
-
-    onSnapshot(q, (snapshot) => {
-        if (!paginationStarted) {
-            oldestMessageDoc = snapshot.docs[snapshot.docs.length - 1] || oldestMessageDoc;
+        if (Snapshot.docs.length < MessagePageSize) {
+            HasMoreOlderMessages = false;
         }
 
-        const shouldStick = isScrolledNearBottom(messageBox);
+        const PreviousHeight = MessageBox.scrollHeight;
 
-        snapshot.docChanges().forEach((change) => {
-            const msg = { id: change.doc.id, ...change.doc.data() };
-            if (change.type === 'removed') {
-                removeMessageElement(msg.id);
+        [...Snapshot.docs].reverse().forEach((Document) => {
+            const Message = {
+                id: Document.id,
+                ...Document.data()
+            };
+
+            if (!IsMainFeedMessage(Message) || MessageElements.has(Message.id)) {
                 return;
             }
-            if (!isMainFeedMessage(msg)) return;
-            upsertMessageElement(msg);
+
+            MessageData.set(Message.id, Message);
+
+            const Milliseconds = MessageTimestampMs(Message);
+            const Node = BuildMessageNode(Message, Milliseconds);
+
+            MessageElements.set(Message.id, Node);
+            MessageBox.insertBefore(Node, MessageBox.firstChild);
+            AddedCount += 1;
         });
 
-        refreshEmptyState();
-
-        if (shouldStick) messageBox.scrollTop = messageBox.scrollHeight;
-    });
-
-    messageBox.addEventListener('scroll', handleScrollForOlderMessages);
-}
-
-/* ---------- Threads ---------- */
-
-function renderThreadRoot() {
-    if (!threadRoot || !activeThreadId) return;
-    const root = messageData.get(activeThreadId);
-    threadRoot.innerHTML = '';
-    if (!root) return;
-    threadRoot.appendChild(buildMessageNode(root, messageTimestampMs(root), true));
-}
-
-function renderThreadReplies(replies) {
-    threadBox.innerHTML = '';
-
-    if (threadCount) {
-        threadCount.textContent = replies.length
-            ? `${replies.length} ${replies.length === 1 ? 'reply' : 'replies'}`
-            : 'No replies';
-    }
-
-    if (!replies.length) {
-        threadBox.innerHTML = '<p class="empty-state">Start the thread below.</p>';
-        return;
-    }
-
-    replies.forEach((reply) => {
-        threadBox.appendChild(buildMessageNode(reply, messageTimestampMs(reply), true));
-    });
-}
-
-function openThread(id) {
-    const root = messageData.get(id);
-    if (!root || !threadPanel) return;
-
-    if (activeThreadId === id) {
-        threadInput.focus();
-        return;
-    }
-
-    closeThread();
-    activeThreadId = id;
-    threadPanel.classList.remove('hidden');
-    renderThreadRoot();
-    renderThreadReplies([]);
-
-    const q = query(collection(db, 'messages'), where('threadId', '==', id));
-    threadUnsub = onSnapshot(q, (snapshot) => {
-        const replies = snapshot.docs
-            .map((d) => ({ id: d.id, ...d.data() }))
-            .sort((a, b) => messageTimestampMs(a) - messageTimestampMs(b));
-
-        const shouldStick = isScrolledNearBottom(threadBox);
-        renderThreadReplies(replies);
-        if (shouldStick) threadBox.scrollTop = threadBox.scrollHeight;
-    }, (err) => console.error('Error loading thread:', err));
-
-    threadInput.focus();
-}
-
-function closeThread() {
-    if (threadUnsub) {
-        threadUnsub();
-        threadUnsub = null;
-    }
-    activeThreadId = null;
-    if (threadPanel) threadPanel.classList.add('hidden');
-    if (threadRoot) threadRoot.innerHTML = '';
-    if (threadBox) threadBox.innerHTML = '';
-    if (threadInput) threadInput.value = '';
-}
-
-function setThreadSending(isSending) {
-    if (threadSend) {
-        threadSend.disabled = isSending;
-        threadSend.textContent = isSending ? 'Sending…' : 'Reply';
-    }
-}
-
-async function sendThreadReply(text) {
-    const user = auth.currentUser;
-    const rootId = activeThreadId;
-    if (!user || !rootId || !text) return;
-
-    setThreadSending(true);
-    try {
-        await addDoc(collection(db, "messages"), {
-            uid: user.uid,
-            displayName: currentDisplayName,
-            profilePic: currentProfilePic,
-            text,
-            imageUrl: null,
-            videoUrl: null,
-            threadId: rootId,
-            createdAt: serverTimestamp()
-        });
-        threadInput.value = '';
-
-        try {
-            await updateDoc(doc(db, 'messages', rootId), {
-                replyCount: increment(1),
-                lastReplyAt: serverTimestamp()
-            });
-        } catch (err) {
-            console.error('Error updating thread count:', err);
-        }
-    } catch (error) {
-        console.error("Error sending reply: ", error);
+        MessageBox.scrollTop += MessageBox.scrollHeight - PreviousHeight;
+    } catch (Error) {
+        console.error("Older Messages Could Not Be Loaded:", Error);
     } finally {
-        setThreadSending(false);
-        threadInput.focus();
+        IsLoadingOlderMessages = false;
+    }
+
+    if (AddedCount === 0 && HasMoreOlderMessages) {
+        await LoadOlderMessages();
     }
 }
 
-if (threadClose) threadClose.addEventListener('click', closeThread);
+function HandleMessageScroll() {
+    if (MessageBox.scrollTop < ScrollNearTopPx) {
+        LoadOlderMessages();
+    }
+}
 
-if (threadForm) {
-    threadForm.addEventListener('submit', (event) => {
-        event.preventDefault();
-        const text = threadInput.value.trim();
-        if (text) sendThreadReply(text);
+function InitChat() {
+    if (!MessageBox) return;
+
+    const MessageQuery = query(
+        collection(Db, "messages"),
+        orderBy("createdAt", "desc"),
+        limit(MessagePageSize)
+    );
+
+    onSnapshot(MessageQuery, (Snapshot) => {
+        if (!PaginationStarted) {
+            OldestMessageDoc = Snapshot.docs[Snapshot.docs.length - 1] || OldestMessageDoc;
+            HasMoreOlderMessages = Snapshot.docs.length === MessagePageSize;
+        }
+
+        const ShouldStick = IsScrolledNearBottom(MessageBox);
+
+        Snapshot.docChanges().forEach((Change) => {
+            const Message = {
+                id: Change.doc.id,
+                ...Change.doc.data()
+            };
+
+            if (Change.type === "removed") {
+                RemoveMessageElement(Message.id);
+                return;
+            }
+
+            if (!IsMainFeedMessage(Message)) {
+                RemoveMessageElement(Message.id);
+                return;
+            }
+
+            UpsertMessageElement(Message);
+        });
+
+        RefreshEmptyState();
+
+        if (ShouldStick) {
+            MessageBox.scrollTop = MessageBox.scrollHeight;
+        }
+    }, (Error) => {
+        console.error("Chat Messages Could Not Be Loaded:", Error);
     });
+
+    MessageBox.addEventListener("scroll", HandleMessageScroll);
 }
 
-/* ---------- Sending ---------- */
+async function ClearAllMessages() {
+    const Snapshot = await getDocs(collection(Db, "messages"));
 
-async function clearAllMessages() {
-    const querySnapshot = await getDocs(collection(db, "messages"));
-    await Promise.all(querySnapshot.docs.map((d) => deleteDoc(doc(db, "messages", d.id))));
-    closeThread();
+    await Promise.all(
+        Snapshot.docs.map((Document) => deleteDoc(doc(Db, "messages", Document.id)))
+    );
 }
 
-const MODERATOR_COMMANDS = {
-    '/clear msgs': clearAllMessages
+const ModeratorCommands = {
+    "/clear msgs": ClearAllMessages
 };
 
-async function sendChatMessage(text, attachment = null) {
-    const user = auth.currentUser;
-    if (!user) return;
+function SetSending(Sending) {
+    IsSending = Sending;
 
-    const command = text ? MODERATOR_COMMANDS[text.trim().toLowerCase()] : null;
-    if (command) {
-        if (!MODERATOR_UIDS.includes(user.uid)) {
-            alert('You do not have permission to use this command.');
-            messageInput.value = '';
+    if (SendButton) {
+        SendButton.disabled = Sending;
+        SendButton.textContent = Sending ? "Sending..." : "Send";
+    }
+
+    if (AttachButton) {
+        AttachButton.disabled = Sending;
+    }
+}
+
+async function GetImageKitAuth() {
+    const Response = await fetch(ImageKitAuthUrl, {
+        method: "GET",
+        headers: {
+            Accept: "application/json"
+        },
+        cache: "no-store"
+    });
+
+    if (!Response.ok) {
+        throw new Error("Image Upload Authentication Failed.");
+    }
+
+    const AuthData = await Response.json();
+
+    if (
+        !AuthData.token ||
+        !AuthData.expire ||
+        !AuthData.signature ||
+        !AuthData.publicKey
+    ) {
+        throw new Error("Image Upload Authentication Was Incomplete.");
+    }
+
+    return AuthData;
+}
+
+async function UploadMedia(File) {
+    const AuthData = await GetImageKitAuth();
+    const FormDataBody = new FormData();
+
+    FormDataBody.append("file", File);
+    FormDataBody.append("fileName", File.name);
+    FormDataBody.append("token", AuthData.token);
+    FormDataBody.append("expire", String(AuthData.expire));
+    FormDataBody.append("signature", AuthData.signature);
+    FormDataBody.append("publicKey", AuthData.publicKey);
+
+    const Response = await fetch(ImageKitUploadUrl, {
+        method: "POST",
+        body: FormDataBody
+    });
+
+    const Result = await Response.json().catch(() => ({}));
+
+    if (!Response.ok || !Result.url) {
+        throw new Error(Result.message || "Media Upload Failed.");
+    }
+
+    return Result.url;
+}
+
+async function SendChatMessage(Text, Attachment = null) {
+    const User = Auth.currentUser;
+
+    if (!User || IsSending) return;
+
+    const Command = Text
+        ? ModeratorCommands[Text.trim().toLowerCase()]
+        : null;
+
+    if (Command) {
+        if (!ModeratorUids.includes(User.uid)) {
+            alert("You Do Not Have Permission To Use This Command.");
+            if (MessageInput) MessageInput.value = "";
             return;
         }
+
+        SetSending(true);
+
         try {
-            await command();
-        } catch (error) {
-            console.error("Error running command: ", error);
+            await Command();
+        } catch (Error) {
+            console.error("Moderator Command Failed:", Error);
+            alert("The Command Could Not Be Completed.");
         } finally {
-            messageInput.value = '';
+            if (MessageInput) MessageInput.value = "";
+            SetSending(false);
         }
+
         return;
     }
 
-    if (!text && !attachment) return;
+    if (!Text && !Attachment) return;
 
-    setSending(true);
+    SetSending(true);
+
     try {
-        await addDoc(collection(db, "messages"), {
-            uid: user.uid,
-            displayName: currentDisplayName,
-            profilePic: currentProfilePic,
-            text: text || '',
-            imageUrl: attachment && attachment.type === 'image' ? attachment.url : null,
-            videoUrl: attachment && attachment.type === 'video' ? attachment.url : null,
+        await addDoc(collection(Db, "messages"), {
+            uid: User.uid,
+            displayName: CurrentDisplayName,
+            profilePic: CurrentProfilePic,
+            text: Text || "",
+            imageUrl: Attachment?.type === "image" ? Attachment.url : null,
+            videoUrl: Attachment?.type === "video" ? Attachment.url : null,
             createdAt: serverTimestamp()
         });
-        messageInput.value = '';
-        if (imageInput) imageInput.value = '';
-    } catch (error) {
-        console.error("Error sending message: ", error);
+
+        if (MessageInput) MessageInput.value = "";
+        if (ImageInput) ImageInput.value = "";
+    } catch (Error) {
+        console.error("Message Send Failed:", Error);
+        alert("Your Message Could Not Be Sent. Please Try Again.");
     } finally {
-        setSending(false);
-        messageInput.focus();
+        SetSending(false);
+
+        if (MessageInput) MessageInput.focus();
     }
 }
 
-function setSending(isSending) {
-    if (sendButton) {
-        sendButton.disabled = isSending;
-        sendButton.textContent = isSending ? 'Sending…' : 'Send';
-    }
-}
+async function HandleMediaFile(File) {
+    if (!File || IsSending) return;
 
-function handleMediaFile(file) {
-    if (!file) return;
+    const IsImage = File.type.startsWith("image/");
+    const IsVideo = File.type.startsWith("video/");
 
-    const isImage = file.type.startsWith('image/');
-    const isVideo = file.type.startsWith('video/');
-
-    if (!isImage && !isVideo) {
-        alert('Please choose an image or video file.');
+    if (!IsImage && !IsVideo) {
+        alert("Please Choose An Image Or Video File.");
         return;
     }
 
-    const maxBytes = isVideo ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
-    if (file.size > maxBytes) {
-        const limitLabel = isVideo ? '4MB' : '5MB';
-        alert(`${isVideo ? 'Video' : 'Image'} is too large. Please choose one under ${limitLabel}.`);
+    const MaxBytes = IsVideo ? MaxVideoBytes : MaxImageBytes;
+    const LimitLabel = IsVideo ? "35 MB" : "25 MB";
+
+    if (File.size > MaxBytes) {
+        alert(`${IsVideo ? "Video" : "Image"} Is Too Large. The Limit Is ${LimitLabel}.`);
+        if (ImageInput) ImageInput.value = "";
         return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (uploadEvent) => {
-        const dataUrl = uploadEvent.target.result;
-        const text = messageInput.value.trim();
-        sendChatMessage(text, { type: isVideo ? 'video' : 'image', url: dataUrl });
-    };
-    reader.readAsDataURL(file);
+    SetSending(true);
+
+    try {
+        const MediaUrl = await UploadMedia(File);
+        const Text = MessageInput?.value.trim() || "";
+
+        await SendUploadedMedia(Text, {
+            type: IsVideo ? "video" : "image",
+            url: MediaUrl
+        });
+    } catch (Error) {
+        console.error("Media Upload Failed:", Error);
+        alert("Your Media Could Not Be Uploaded. Please Try Again.");
+    } finally {
+        if (ImageInput) ImageInput.value = "";
+        SetSending(false);
+
+        if (MessageInput) MessageInput.focus();
+    }
 }
 
-if (attachButton && imageInput) {
-    attachButton.addEventListener('click', () => imageInput.click());
-    imageInput.addEventListener('change', (e) => handleMediaFile(e.target.files[0]));
+async function SendUploadedMedia(Text, Attachment) {
+    const User = Auth.currentUser;
+
+    if (!User) {
+        throw new Error("You Must Be Signed In To Send Media.");
+    }
+
+    await addDoc(collection(Db, "messages"), {
+        uid: User.uid,
+        displayName: CurrentDisplayName,
+        profilePic: CurrentProfilePic,
+        text: Text || "",
+        imageUrl: Attachment.type === "image" ? Attachment.url : null,
+        videoUrl: Attachment.type === "video" ? Attachment.url : null,
+        createdAt: serverTimestamp()
+    });
+
+    if (MessageInput) MessageInput.value = "";
 }
 
-if (messageInput) {
-    messageInput.addEventListener('paste', (event) => {
-        const items = (event.clipboardData || event.originalEvent.clipboardData).items;
-        for (const item of items) {
-            if (item.kind === 'file' && (item.type.startsWith('image/') || item.type.startsWith('video/'))) {
-                event.preventDefault();
-                handleMediaFile(item.getAsFile());
+if (AttachButton && ImageInput) {
+    AttachButton.addEventListener("click", () => {
+        if (!IsSending) ImageInput.click();
+    });
+
+    ImageInput.addEventListener("change", (Event) => {
+        HandleMediaFile(Event.target.files?.[0]);
+    });
+}
+
+if (MessageInput) {
+    MessageInput.addEventListener("paste", (Event) => {
+        const Items = Event.clipboardData?.items || [];
+
+        for (const Item of Items) {
+            if (
+                Item.kind === "file" &&
+                (Item.type.startsWith("image/") || Item.type.startsWith("video/"))
+            ) {
+                Event.preventDefault();
+                HandleMediaFile(Item.getAsFile());
                 break;
             }
         }
     });
 }
 
-if (messageForm) {
-    messageForm.addEventListener('submit', (event) => {
-        event.preventDefault();
-        const text = messageInput.value.trim();
-        if (text) sendChatMessage(text);
+if (MessageForm) {
+    MessageForm.addEventListener("submit", (Event) => {
+        Event.preventDefault();
+
+        const Text = MessageInput?.value.trim() || "";
+        if (Text) SendChatMessage(Text);
     });
-} else if (sendButton) {
-    sendButton.addEventListener('click', () => {
-        const text = messageInput.value.trim();
-        if (text) sendChatMessage(text);
+} else if (SendButton) {
+    SendButton.addEventListener("click", () => {
+        const Text = MessageInput?.value.trim() || "";
+        if (Text) SendChatMessage(Text);
     });
-    if (messageInput) {
-        messageInput.addEventListener('keydown', (event) => {
-            if (event.key === 'Enter') {
-                const text = messageInput.value.trim();
-                if (text) sendChatMessage(text);
+
+    if (MessageInput) {
+        MessageInput.addEventListener("keydown", (Event) => {
+            if (Event.key === "Enter" && !Event.shiftKey) {
+                Event.preventDefault();
+
+                const Text = MessageInput.value.trim();
+                if (Text) SendChatMessage(Text);
             }
         });
     }
 }
 
-/* ---------- Session ---------- */
-
-function getInitialCachedAccount(uid) {
+function GetInitialCachedAccount(Uid) {
     try {
-        const raw = localStorage.getItem(`aurora_account_${uid}`);
-        if (!raw) return null;
-        return JSON.parse(raw).data;
+        const Raw = localStorage.getItem(`aurora_account_${Uid}`);
+        if (!Raw) return null;
+
+        return JSON.parse(Raw).data;
     } catch {
         return null;
     }
 }
 
-onAuthStateChanged(auth, async (user) => {
-    if (!user) {
-        window.location.href = '../';
+onAuthStateChanged(Auth, async (User) => {
+    if (!User) {
+        window.location.href = "../";
         return;
     }
 
-    const cached = getInitialCachedAccount(user.uid);
-    if (cached) applyUserData(cached);
+    const CachedAccount = GetInitialCachedAccount(User.uid);
 
-    try {
-        const { data } = await loadAccount(db, user.uid, {
-            onFresh: (fresh) => applyUserData(fresh)
-        });
-        if (data) applyUserData(data);
-    } catch (error) {
-        console.error('Failed to load user data:', error);
+    if (CachedAccount) {
+        ApplyUserData(CachedAccount);
     }
 
-    setupPresence(user);
-    initOnlineUsersList();
-    initChat();
+    try {
+        const { data } = await loadAccount(Db, User.uid, {
+            onFresh: (FreshAccount) => ApplyUserData(FreshAccount)
+        });
+
+        if (data) ApplyUserData(data);
+    } catch (Error) {
+        console.error("Account Data Could Not Be Loaded:", Error);
+    }
+
+    InitChat();
 });
 
-if (logoutButton) {
-    logoutButton.addEventListener('click', async () => {
-        const user = auth.currentUser;
-        if (user) {
-            await setDoc(doc(db, "status", user.uid), {
-                status: 'offline',
-                lastChanged: serverTimestamp()
-            }, { merge: true });
+if (LogoutButton) {
+    LogoutButton.addEventListener("click", async () => {
+        try {
+            await signOut(Auth);
+            localStorage.clear();
+            window.location.href = "../";
+        } catch (Error) {
+            console.error("Logout Failed:", Error);
+            alert("Could Not Log Out. Please Try Again.");
         }
-        if (presenceInterval) clearInterval(presenceInterval);
-        await signOut(auth);
-        localStorage.clear();
-        window.location.href = '../';
-    });
-}
-
-if (settingsButton) {
-    settingsButton.addEventListener('click', () => {
-        window.location.href = '/aurora/settings/account/';
     });
 }
