@@ -3,28 +3,49 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aurora</title>
+    <title>Under Maintenance</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
     <link rel="stylesheet" href="../style.css">
-    <script>
-        const t = localStorage.getItem('aurora_theme');
-        if (t) document.documentElement.setAttribute('data-theme', t);
-    </script>
 </head>
 <body>
-    <div class="dashboard-container">
-        <h2>Aurora</h2>
-        <div class="auth-tabs">
-            <button id="login-tab" class="tab-btn active" type="button">Log In</button>
-            <button id="signup-tab" class="tab-btn" type="button">Sign Up</button>
+    <main class="container">
+        <h1>Site Is Currently Being Remade</h1>
+
+        <p class="description">
+            We're making some changes. The site will be back soon.
+        </p>
+
+        <div class="downtime">
+            <span>Time Since Maintenance Started</span>
+            <strong id="downtime">00:00:00:00</strong>
         </div>
 
-        <form id="auth-form">
-            <input type="email" id="email-input" placeholder="Email..." autocomplete="off" required>
-            <input type="password" id="password-input" placeholder="Password..." autocomplete="off" required>
-            <button type="submit" id="submit-button">Log In</button>
-        </form>
-    </div>
+        <p class="notice">
+            You'll Have To Sign Up Again After Maintenance.
+        </p>
+    </main>
 
-    <script type="module" src="onboarding.js"></script>
+    <script>
+        const maintenanceStart = new Date("2026-11-20T03:53:00").getTime();
+
+        function updateDowntime() {
+            const elapsed = Math.max(0, Date.now() - maintenanceStart);
+
+            const days = Math.floor(elapsed / 86400000);
+            const hours = Math.floor(elapsed / 3600000) % 24;
+            const minutes = Math.floor(elapsed / 60000) % 60;
+            const seconds = Math.floor(elapsed / 1000) % 60;
+
+            document.getElementById("downtime").textContent =
+                `${String(days).padStart(2, "0")}:${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+        }
+
+        updateDowntime();
+        setInterval(updateDowntime, 1000);
+    </script>
 </body>
 </html>
