@@ -12,6 +12,8 @@
     <link rel="stylesheet" href="../style.css">
 </head>
 <body>
+    <canvas id="drawingCanvas"></canvas>
+
     <main class="container">
         <h1>Site Is Currently Being Remade</h1>
 
@@ -28,15 +30,9 @@
             You'll Have To Sign Up Again After Maintenance.
         </p>
 
-        <section class="drawing-section">
-            <div class="drawing-header">
-                <span>Drawing Canvas</span>
-
-                <button type="button" id="clearCanvas">Clear</button>
-            </div>
-
-            <canvas id="drawingCanvas"></canvas>
-        </section>
+        <p class="drawing-note">
+            You Can Draw On This Page To Leave A Note Or Message Btw.
+        </p>
     </main>
 
     <script>
@@ -59,23 +55,21 @@
 
         const canvas = document.getElementById("drawingCanvas");
         const context = canvas.getContext("2d");
-        const clearButton = document.getElementById("clearCanvas");
-
         const storageKey = "maintenanceDrawing";
 
         let drawing = false;
         let lastX = 0;
         let lastY = 0;
+        let saveTimeout;
 
         function resizeCanvas() {
-            const savedDrawing = localStorage.getItem(storageKey);
-            const previousWidth = canvas.width;
-            const previousHeight = canvas.height;
+            const savedDrawing = canvas.toDataURL("image/png");
+            const hadDrawing = localStorage.getItem(storageKey);
 
-            const image = savedDrawing ? new Image() : null;
+            const image = new Image();
 
-            canvas.width = canvas.clientWidth * window.devicePixelRatio;
-            canvas.height = canvas.clientHeight * window.devicePixelRatio;
+            canvas.width = window.innerWidth * window.devicePixelRatio;
+            canvas.height = window.innerHeight * window.devicePixelRatio;
 
             context.setTransform(
                 window.devicePixelRatio,
@@ -91,40 +85,36 @@
             context.lineJoin = "round";
             context.strokeStyle = "#ffffff";
 
-            if (image) {
+            if (hadDrawing) {
                 image.onload = () => {
-                    context.drawImage(
-                        image,
-                        0,
-                        0,
-                        canvas.clientWidth,
-                        canvas.clientHeight
-                    );
+                    context.drawImage(image, 0, 0, window.innerWidth, window.innerHeight);
                 };
 
-                image.src = savedDrawing;
+                image.src = hadDrawing;
             }
         }
 
         function saveDrawing() {
-            try {
-                localStorage.setItem(storageKey, canvas.toDataURL("image/png"));
-            } catch (error) {
-                console.warn("Unable to save drawing.");
-            }
+            clearTimeout(saveTimeout);
+
+            saveTimeout = setTimeout(() => {
+                try {
+                    localStorage.setItem(storageKey, canvas.toDataURL("image/png"));
+                } catch (error) {
+                    console.warn("Unable To Save Drawing.");
+                }
+            }, 200);
         }
 
         function getPosition(event) {
-            const rect = canvas.getBoundingClientRect();
-
             return {
-                x: event.clientX - rect.left,
-                y: event.clientY - rect.top
+                x: event.clientX,
+                y: event.clientY
             };
         }
 
         function startDrawing(event) {
-            event.preventDefault();
+            if (event.button !== 0 && event.pointerType === "mouse") return;
 
             drawing = true;
 
@@ -142,8 +132,6 @@
         function draw(event) {
             if (!drawing) return;
 
-            event.preventDefault();
-
             const position = getPosition(event);
 
             context.beginPath();
@@ -153,6 +141,8 @@
 
             lastX = position.x;
             lastY = position.y;
+
+            saveDrawing();
         }
 
         function stopDrawing() {
@@ -168,19 +158,22 @@
         canvas.addEventListener("pointercancel", stopDrawing);
         canvas.addEventListener("lostpointercapture", stopDrawing);
 
-        clearButton.addEventListener("click", () => {
-            context.clearRect(0, 0, canvas.width, canvas.height);
-            localStorage.removeItem(storageKey);
-        });
+        window.addEventListener("resize", resizeCanvas);
 
-        let resizeTimeout;
+        const savedDrawing = localStorage.getItem(storageKey);
 
-        window.addEventListener("resize", () => {
-            clearTimeout(resizeTimeout);
-            resizeTimeout = setTimeout(resizeCanvas, 150);
-        });
+        if (savedDrawing) {
+            const image = new Image();
 
-        resizeCanvas();
+            image.onload = () => {
+                context.drawImage(image, 0, 0, window.innerWidth, window.innerHeight);
+            };
+
+            resizeCanvas();
+            image.src = savedDrawing;
+        } else {
+            resizeCanvas();
+        }
     </script>
 </body>
 </html>
