@@ -1,3 +1,4 @@
+
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
 import { getFirestore, doc, getDoc, runTransaction, setDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
@@ -47,10 +48,6 @@ if (loginForm) {
             const userDoc = await getDoc(userDocRef);
 
             if (!userDoc.exists()) {
-                const ipResponse = await fetch('https://api.ipify.org?format=json');
-                const ipData = await ipResponse.json();
-                const userIp = ipData.ip;
-
                 const counterRef = doc(db, "metadata", "userRegistry");
                 const sequentialId = await runTransaction(db, async (transaction) => {
                     const counterDoc = await transaction.get(counterRef);
@@ -65,7 +62,6 @@ if (loginForm) {
                 const newUserData = {
                     email: identity,
                     sequentialId,
-                    ipAddress: userIp,
                     createdAt: new Date()
                 };
 
@@ -76,9 +72,7 @@ if (loginForm) {
             }
 
             window.location.href = '/aurora/general/';
-        } catch (error) {
-            console.error("Provisioning error:", error);
-            alert("Operation failed: " + error.message);
+        } catch {
         }
     });
 }
