@@ -3,102 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aurora</title>
+    <title>Under Maintenance</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
-        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
-        import { getFirestore } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
-        import { loadAccount, resolveUidBySequentialId } from "./account-store.js";
+    <main class="container">
+        <h1>Site Is Currently Being Remade</h1>
 
-        const firebaseConfig = {
-            apiKey: "AIzaSyCLKCCpNbCs2AJm7g0JtGIjL43X5hr31N8",
-            authDomain: "aurora-9e0fe.firebaseapp.com",
-            projectId: "aurora-9e0fe",
-            storageBucket: "aurora-9e0fe.firebasestorage.app",
-            messagingSenderId: "1023486645506",
-            appId: "1:1023486645506:web:c64a98ebf0c3c817e01e1b",
-            measurementId: "G-3XVQTC189X"
-        };
+        <p class="description">
+            We're making some changes. The site will be back soon.
+        </p>
 
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
+        <div class="downtime">
+            <span>Time Since Maintenance Started</span>
+            <strong id="downtime">00:00:00:00</strong>
+        </div>
 
-        function escapeHtml(str) {
-            if (str === null || str === undefined) return '';
-            return String(str)
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;')
-                .replace(/'/g, '&#039;');
+        <p class="notice">
+            You'll Have To Sign Up Again After Maintenance.
+        </p>
+    </main>
+
+    <script>
+        const maintenanceStart = new Date("2026-11-20T03:53:00").getTime();
+
+        function updateDowntime() {
+            const elapsed = Math.max(0, Date.now() - maintenanceStart);
+
+            const days = Math.floor(elapsed / 86400000);
+            const hours = Math.floor(elapsed / 3600000) % 24;
+            const minutes = Math.floor(elapsed / 60000) % 60;
+            const seconds = Math.floor(elapsed / 1000) % 60;
+
+            document.getElementById("downtime").textContent =
+                `${String(days).padStart(2, "0")}:${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
         }
 
-        onAuthStateChanged(auth, (user) => {
-            if (!user) {
-                window.location.href = '/aurora/onboarding/';
-                return;
-            }
-
-            const urlParams = new URLSearchParams(window.location.search);
-            const customPath = urlParams.get('p');
-
-            if (customPath) {
-                if (customPath.startsWith('/settings')) {
-                    return;
-                }
-
-                const match = customPath.match(/^\/users\/([^\/]+)\/profile$/);
-                if (match) {
-                    loadProfileView(match[1]);
-                    return;
-                }
-            }
-
-            window.location.href = '/aurora/general/';
-        });
-
-        async function loadProfileView(sequentialId) {
-            renderProfileShell(sequentialId, 'Loading profile…');
-
-            const uid = await resolveUidBySequentialId(db, sequentialId);
-            if (!uid) {
-                renderProfileShell(sequentialId, 'This profile could not be found.');
-                return;
-            }
-
-            const { data } = await loadAccount(db, uid, {
-                onFresh: (fresh) => renderProfileDetails(sequentialId, fresh)
-            });
-
-            if (data) {
-                renderProfileDetails(sequentialId, data);
-            } else {
-                renderProfileShell(sequentialId, 'This profile could not be found.');
-            }
-        }
-
-        function renderProfileShell(sequentialId, statusText) {
-            document.body.innerHTML = `
-                <div style="background:#17171c; color:#fff; padding:40px; font-family:sans-serif;">
-                    <h2>User Profile: ${escapeHtml(sequentialId)}</h2>
-                    <p id="profile-status">${escapeHtml(statusText)}</p>
-                    <a href="/aurora/general/" style="color:#fff;">Back to General Chat</a>
-                </div>
-            `;
-        }
-
-        function renderProfileDetails(sequentialId, userData) {
-            document.body.innerHTML = `
-                <div style="background:#17171c; color:#fff; padding:40px; font-family:sans-serif;">
-                    <h2>User Profile: ${escapeHtml(sequentialId)}</h2>
-                    <p>Display name: ${escapeHtml(userData.displayName || 'Anonymous')}</p>
-                    <a href="/aurora/general/" style="color:#fff;">Back to General Chat</a>
-                </div>
-            `;
-        }
+        updateDowntime();
+        setInterval(updateDowntime, 1000);
     </script>
 </body>
 </html>
