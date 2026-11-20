@@ -1,18 +1,16 @@
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
 
-import {
-    getAuth,
-    onAuthStateChanged,
-    signOut
-} from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
+import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
 
 import {
     getFirestore,
     doc,
+    setDoc,
     collection,
     addDoc,
     query,
+    where,
     orderBy,
     limit,
     startAfter,
@@ -20,86 +18,79 @@ import {
     serverTimestamp,
     getDocs,
     deleteDoc,
-    updateDoc
+    updateDoc,
+    increment
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 
-import {
-    getDatabase,
-    ref,
-    push,
-    set,
-    remove,
-    onValue,
-    onDisconnect,
-    serverTimestamp as RealtimeServerTimestamp
-} from "https://www.gstatic.com/firebasejs/11.0.0/firebase-database.js";
+import { loadAccount, updateAccount } from "../account-store.js";
 
-import { loadAccount } from "../account-store.js";
-
-const FirebaseConfig = {
+const firebaseConfig = {
     apiKey: "AIzaSyCLKCCpNbCs2AJm7g0JtGIjL43X5hr31N8",
     authDomain: "aurora-9e0fe.firebaseapp.com",
     projectId: "aurora-9e0fe",
     storageBucket: "aurora-9e0fe.firebasestorage.app",
     messagingSenderId: "1023486645506",
     appId: "1:1023486645506:web:c64a98ebf0c3c817e01e1b",
-    measurementId: "G-3XVQTC189X",
-    databaseURL: "https://aurora-9e0fe-default-rtdb.firebaseio.com"
+    measurementId: "G-3XVQTC189X"
 };
 
-const ModeratorUids = [
+const MODERATOR_UIDS = [
     "AQ1oLVW0fNgESU0H5GEvcycxYJ73",
     "IW24TCbQSkamV2LdxSFObbBg9u73"
 ];
 
-const ImageKitAuthUrl = "https://aurora-imagekit-auth.4dapple.workers.dev/auth";
-const ImageKitUploadUrl = "https://upload.imagekit.io/api/v1/files/upload";
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 4 * 1024 * 1024;
 
-const MaxImageBytes = 25 * 1024 * 1024;
-const MaxVideoBytes = 35 * 1024 * 1024;
-const ScrollNearBottomPx = 80;
-const ScrollNearTopPx = 60;
-const MessagePageSize = 30;
+const SCROLL_NEAR_BOTTOM_PX = 80;
+const SCROLL_NEAR_TOP_PX = 60;
+const MESSAGE_PAGE_SIZE = 30;
 
-const App = initializeApp(FirebaseConfig);
-const Auth = getAuth(App);
-const Db = getFirestore(App);
-const RealtimeDb = getDatabase(App);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
-const LogoutButton = document.getElementById("logout-button");
-const MessageBox = document.getElementById("message-box");
-const MessageForm = document.getElementById("message-form");
-const MessageInput = document.getElementById("message-input");
-const SendButton = document.getElementById("send-button");
-const ImageInput = document.getElementById("image-file-input");
-const AttachButton = document.getElementById("attach-button");
-const ImageModal = document.getElementById("image-modal");
-const ImageModalImg = document.getElementById("image-modal-img");
-const ImageModalClose = document.getElementById("image-modal-close");
+const logoutButton = document.getElementById("logout-button");
+const settingsButton = document.getElementById("settings-button");
+const profileButton = document.getElementById("profile-button");
 
-const OnlineCount = document.getElementById("online-count");
-const OnlineUsersList = document.getElementById("online-users-list");
+const messageBox = document.getElementById("message-box");
+const messageForm = document.getElementById("message-form");
+const messageInput = document.getElementById("message-input");
+const sendButton = document.getElementById("send-button");
 
-const DefaultAvatar = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2366665f'><path d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z'/></svg>";
+const imageInput = document.getElementById("image-file-input");
+const attachButton = document.getElementById("attach-button");
 
-let CurrentDisplayName = "Anonymous";
-let CurrentProfilePic = DefaultAvatar;
-let IsSending = false;
+const onlineUsersList = document.getElementById("online-users-list");
+const onlineCount = document.getElementById("online-count");
 
-let CurrentUser = null;
-let PresenceConnectionRef = null;
-let PresenceConnectionListener = null;
-let PresenceRootListener = null;
-let PresenceConnected = false;
-let CurrentConnectionStatus = null;
-let PresenceConnectionAttempt = 0;
+const imageModal = document.getElementById("image-modal");
+const imageModalImg = document.getElementById("image-modal-img");
+const imageModalClose = document.getElementById("image-modal-close");
 
-const PresenceStates = new Map();
+const threadPanel = document.getElementById("thread-panel");
+const threadClose = document.getElementById("thread-close");
+const threadRoot = document.getElementById("thread-root");
+const threadCount = document.getElementById("thread-count");
+const threadBox = document.getElementById("thread-box");
+const threadForm = document.getElementById("thread-form");
+const threadInput = document.getElementById("thread-input");
+const threadSend = document.getElementById("thread-send");
 
-function EscapeHtml(Value) {
-    if (Value === null || Value === undefined) return "";
+const defaultAvatar = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2366665f'><path d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z'/></svg>";
 
-    return String(Value)
+let currentDisplayName = "Anonymous";
+let currentProfilePic = "";
+
+let presenceInterval = null;
+let presenceListenersAttached = false;
+let presenceUnsubscribe = null;
+
+function escapeHtml(str) {
+    if (str === null || str === undefined) return "";
+
+    return String(str)
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
@@ -107,377 +98,299 @@ function EscapeHtml(Value) {
         .replace(/'/g, "&#039;");
 }
 
-function IsSafeMediaSrc(Src, Kind) {
-    if (!Src) return false;
+function isSafeMediaSrc(src, kind) {
+    if (!src || typeof src !== "string") return false;
 
-    try {
-        const Url = new URL(Src);
-        return Url.protocol === "https:" || Url.protocol === "http:";
-    } catch {
-        return typeof Src === "string" && Src.startsWith(`data:${Kind}/`);
-    }
+    if (/^https?:\/\//i.test(src)) return true;
+
+    return src.startsWith(`data:${kind}/`);
 }
 
-function IsSafeImageSrc(Src) {
-    return IsSafeMediaSrc(Src, "image");
+function isSafeImageSrc(src) {
+    return isSafeMediaSrc(src, "image");
 }
 
-function IsSafeVideoSrc(Src) {
-    return IsSafeMediaSrc(Src, "video");
+function isSafeVideoSrc(src) {
+    return isSafeMediaSrc(src, "video");
 }
 
-function FormatMessageText(Value) {
-    if (!Value) return "";
+function formatMessageText(text) {
+    if (!text) return "";
 
-    const Escaped = EscapeHtml(Value);
-    const UrlRegex = /(https?:\/\/[^\s]+)/g;
+    const escaped = escapeHtml(text);
 
-    return Escaped.replace(UrlRegex, (Url) => {
-        const SafeUrl = EscapeHtml(Url);
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
 
-        return `<a href="${SafeUrl}" target="_blank" rel="noopener noreferrer">${SafeUrl}</a>`;
+    return escaped.replace(urlRegex, (url) => {
+        const safeUrl = escapeHtml(url);
+
+        return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeUrl}</a>`;
     });
 }
 
-function FormatTime(Milliseconds) {
-    const DateValue = new Date(Milliseconds);
-    const Now = new Date();
+function formatTime(ms) {
+    const date = new Date(ms);
+    const now = new Date();
 
-    const Time = DateValue.toLocaleTimeString([], {
+    const time = date.toLocaleTimeString([], {
         hour: "numeric",
         minute: "2-digit"
     });
 
-    if (DateValue.toDateString() === Now.toDateString()) return Time;
-
-    const Yesterday = new Date(Now);
-    Yesterday.setDate(Now.getDate() - 1);
-
-    if (DateValue.toDateString() === Yesterday.toDateString()) {
-        return `Yesterday ${Time}`;
+    if (date.toDateString() === now.toDateString()) {
+        return time;
     }
 
-    return `${DateValue.toLocaleDateString([], {
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+
+    if (date.toDateString() === yesterday.toDateString()) {
+        return `Yesterday ${time}`;
+    }
+
+    return `${date.toLocaleDateString([], {
         month: "short",
         day: "numeric"
-    })} ${Time}`;
+    })} ${time}`;
 }
 
-function SetAvatar(Image, Src) {
-    Image.addEventListener("error", () => {
-        Image.src = DefaultAvatar;
+function setAvatar(img, src) {
+    if (!img) return;
+
+    img.addEventListener("error", () => {
+        img.src = defaultAvatar;
     }, { once: true });
 
-    Image.src = IsSafeImageSrc(Src) ? Src : DefaultAvatar;
+    img.src = isSafeImageSrc(src) ? src : defaultAvatar;
 }
 
-function ApplyUserData(UserData) {
-    if (UserData?.displayName) {
-        CurrentDisplayName = UserData.displayName;
+function applyUserData(userData) {
+    if (!userData) return;
+
+    if (userData.displayName) {
+        currentDisplayName = userData.displayName;
+
+        // Exposed So Call.js Can Show The Right Name In Calls.
+        window.currentDisplayName = currentDisplayName;
     }
 
-    CurrentProfilePic = IsSafeImageSrc(UserData?.profilePic)
-        ? UserData.profilePic
-        : DefaultAvatar;
+    currentProfilePic = isSafeImageSrc(userData.profilePic)
+        ? userData.profilePic
+        : defaultAvatar;
 
-    UpdatePresenceConnection(true);
-}
-
-function OpenLightbox(ImageSrc) {
-    if (!ImageModal || !ImageModalImg) return;
-
-    ImageModalImg.src = ImageSrc;
-    ImageModal.classList.remove("hidden");
-}
-
-function CloseLightbox() {
-    if (!ImageModal) return;
-
-    ImageModal.classList.add("hidden");
-
-    if (ImageModalImg) ImageModalImg.src = "";
-}
-
-if (ImageModalClose) {
-    ImageModalClose.addEventListener("click", CloseLightbox);
-}
-
-if (ImageModal) {
-    ImageModal.addEventListener("click", (Event) => {
-        if (Event.target === ImageModal) CloseLightbox();
-    });
-}
-
-document.addEventListener("keydown", (Event) => {
-    if (
-        Event.key === "Escape" &&
-        ImageModal &&
-        !ImageModal.classList.contains("hidden")
-    ) {
-        CloseLightbox();
-    }
-});
-
-// Presence
-
-function GetBrowserStatus() {
-    return document.visibilityState === "visible" && document.hasFocus()
-        ? "online"
-        : "away";
-}
-
-async function UpdatePresenceConnection(Force = false) {
-    if (
-        !CurrentUser ||
-        !PresenceConnectionRef ||
-        !PresenceConnected
-    ) {
-        return;
-    }
-
-    const Status = GetBrowserStatus();
-
-    if (!Force && CurrentConnectionStatus === Status) {
-        return;
-    }
-
-    try {
-        await set(PresenceConnectionRef, {
-            status: Status,
-            displayName: CurrentDisplayName,
-            profilePic: CurrentProfilePic,
-            lastChanged: RealtimeServerTimestamp()
-        });
-
-        CurrentConnectionStatus = Status;
-
-    } catch (Error) {
-        console.error("Presence Update Failed:", Error);
+    if (profileButton && userData.sequentialId) {
+        profileButton.onclick = () => {
+            window.location.href = `/aurora/users/${encodeURIComponent(userData.sequentialId)}/profile/`;
+        };
     }
 }
 
-function GetPresenceStatus(Connections) {
-    const ConnectionList = Object.values(Connections || {});
+/* ---------- Presence ---------- */
 
-    if (ConnectionList.some((Connection) => Connection.status === "online")) {
-        return "online";
+function setupPresence(user) {
+    if (presenceUnsubscribe) {
+        presenceUnsubscribe();
+        presenceUnsubscribe = null;
     }
 
-    if (ConnectionList.some((Connection) => Connection.status === "away")) {
-        return "away";
+    if (presenceListenersAttached) {
+        document.removeEventListener("visibilitychange", handlePresenceChange);
+        window.removeEventListener("focus", handlePresenceChange);
+        window.removeEventListener("blur", handlePresenceChange);
+        window.removeEventListener("pagehide", handlePresenceOffline);
+
+        presenceListenersAttached = false;
     }
 
-    return "offline";
-}
+    const userStatusRef = doc(db, "status", user.uid);
 
-function RenderPresenceUsers() {
-    if (!OnlineUsersList) return;
+    let lastStatus = null;
+    let presenceWrite = Promise.resolve();
 
-    const Users = Array.from(PresenceStates.entries())
-        .map(([Uid, Data]) => ({
-            uid: Uid,
-            ...Data
-        }))
-        .filter((User) => (
-            User.status === "online" ||
-            User.status === "away"
-        ))
-        .sort((First, Second) => {
-            if (First.status !== Second.status) {
-                return First.status === "online" ? -1 : 1;
-            }
+    const updateStatus = async (status, force = false) => {
+        if (!force && lastStatus === status) return;
 
-            return First.displayName.localeCompare(Second.displayName);
-        });
+        lastStatus = status;
 
-    const OnlineUsers = Users.filter((User) => User.status === "online");
-
-    if (OnlineCount) {
-        OnlineCount.textContent = `(${OnlineUsers.length})`;
-    }
-
-    OnlineUsersList.replaceChildren();
-
-    Users.forEach((User) => {
-        const UserElement = document.createElement("div");
-        UserElement.className = `PresenceUser Presence${User.status === "online" ? "Online" : "Away"}`;
-
-        const Avatar = document.createElement("img");
-        Avatar.className = "PresenceAvatar";
-        Avatar.alt = "";
-        SetAvatar(Avatar, User.profilePic);
-
-        const Details = document.createElement("div");
-        Details.className = "PresenceDetails";
-
-        const Name = document.createElement("span");
-        Name.className = "PresenceName";
-        Name.textContent = User.displayName || "Anonymous";
-
-        const Status = document.createElement("span");
-        Status.className = `PresenceStatus PresenceStatus${User.status === "online" ? "Online" : "Away"}`;
-        Status.textContent = User.status === "online" ? "Online" : "Away";
-
-        const Indicator = document.createElement("span");
-        Indicator.className = `PresenceIndicator PresenceIndicator${User.status === "online" ? "Online" : "Away"}`;
-        Indicator.setAttribute("aria-hidden", "true");
-
-        Details.append(Name, Status);
-        UserElement.append(Avatar, Details, Indicator);
-
-        OnlineUsersList.appendChild(UserElement);
-    });
-}
-
-function HandlePresenceSnapshot(Snapshot) {
-    const PresenceData = Snapshot.val() || {};
-
-    PresenceStates.clear();
-
-    Object.entries(PresenceData).forEach(([Uid, UserPresence]) => {
-        const Connections = UserPresence?.connections || {};
-        const ConnectionList = Object.values(Connections);
-
-        if (ConnectionList.length === 0) return;
-
-        const Status = GetPresenceStatus(Connections);
-
-        if (Status === "offline") return;
-
-        const PreferredConnection =
-            ConnectionList.find((Connection) => Connection.status === "online") ||
-            ConnectionList[0];
-
-        PresenceStates.set(Uid, {
-            status: Status,
-            displayName: PreferredConnection.displayName || "Anonymous",
-            profilePic: IsSafeImageSrc(PreferredConnection.profilePic)
-                ? PreferredConnection.profilePic
-                : DefaultAvatar
-        });
-    });
-
-    RenderPresenceUsers();
-}
-
-function StartPresence(User) {
-    if (!User) return;
-
-    if (CurrentUser?.uid === User.uid && PresenceConnectionRef) {
-        return;
-    }
-
-    StopPresence();
-
-    CurrentUser = User;
-    PresenceConnected = false;
-    CurrentConnectionStatus = null;
-
-    const ConnectionsRef = ref(
-        RealtimeDb,
-        `presence/${User.uid}/connections`
-    );
-
-    PresenceConnectionRef = push(ConnectionsRef);
-
-    PresenceRootListener = onValue(
-        ref(RealtimeDb, "presence"),
-        HandlePresenceSnapshot,
-        (Error) => {
-            console.error("Presence Listener Failed:", Error);
-        }
-    );
-
-    PresenceConnectionListener = onValue(
-        ref(RealtimeDb, ".info/connected"),
-        async (Snapshot) => {
-            PresenceConnected = Snapshot.val() === true;
-
-            if (!PresenceConnected) {
-                PresenceConnectionAttempt += 1;
-                CurrentConnectionStatus = null;
-                return;
-            }
-
-            const Attempt = ++PresenceConnectionAttempt;
-
+        presenceWrite = presenceWrite.then(async () => {
             try {
-                await onDisconnect(PresenceConnectionRef).remove();
-
-                if (
-                    !PresenceConnected ||
-                    Attempt !== PresenceConnectionAttempt
-                ) {
-                    return;
-                }
-
-                CurrentConnectionStatus = null;
-
-                await UpdatePresenceConnection(true);
-
-            } catch (Error) {
-                console.error("Presence Connection Failed:", Error);
+                await setDoc(userStatusRef, {
+                    uid: user.uid,
+                    displayName: currentDisplayName,
+                    profilePic: currentProfilePic,
+                    status,
+                    lastChanged: serverTimestamp()
+                }, { merge: true });
+            } catch (err) {
+                console.error("Error Updating Presence:", err);
             }
+        });
+
+        return presenceWrite;
+    };
+
+    function handlePresenceChange() {
+        const isVisible = document.visibilityState === "visible";
+        const isFocused = document.hasFocus();
+
+        updateStatus(isVisible && isFocused ? "online" : "away");
+    }
+
+    function handlePresenceOffline() {
+        lastStatus = "offline";
+
+        setDoc(userStatusRef, {
+            status: "offline",
+            lastChanged: serverTimestamp()
+        }, { merge: true }).catch((err) => {
+            console.error("Error Updating Offline Presence:", err);
+        });
+    }
+
+    document.addEventListener("visibilitychange", handlePresenceChange);
+    window.addEventListener("focus", handlePresenceChange);
+    window.addEventListener("blur", handlePresenceChange);
+    window.addEventListener("pagehide", handlePresenceOffline);
+
+    presenceListenersAttached = true;
+
+    handlePresenceChange();
+
+    // Keep The Existing Interval Variable Available Without
+    // Running A Continuous Heartbeat.
+    if (presenceInterval) {
+        clearInterval(presenceInterval);
+        presenceInterval = null;
+    }
+}
+
+/* ---------- Online Users ---------- */
+
+function initOnlineUsersList() {
+    if (!onlineUsersList) return;
+
+    const statusQuery = collection(db, "status");
+
+    if (presenceUnsubscribe) {
+        presenceUnsubscribe();
+    }
+
+    presenceUnsubscribe = onSnapshot(statusQuery, (snapshot) => {
+        onlineUsersList.innerHTML = "";
+
+        const active = [];
+
+        snapshot.forEach((docSnap) => {
+            const data = docSnap.data();
+
+            if (data.status === "offline") return;
+
+            active.push(data);
+        });
+
+        active.sort((a, b) => {
+            if (a.status !== b.status) {
+                return a.status === "away" ? 1 : -1;
+            }
+
+            return String(a.displayName || "").localeCompare(
+                String(b.displayName || "")
+            );
+        });
+
+        if (onlineCount) {
+            onlineCount.textContent = active.length
+                ? `· ${active.length}`
+                : "";
         }
-    );
-}
 
-async function StopPresence() {
-    if (PresenceConnectionListener) {
-        PresenceConnectionListener();
-        PresenceConnectionListener = null;
-    }
-
-    if (PresenceRootListener) {
-        PresenceRootListener();
-        PresenceRootListener = null;
-    }
-
-    const PreviousConnectionRef = PresenceConnectionRef;
-
-    PresenceConnectionRef = null;
-    PresenceConnected = false;
-    CurrentConnectionStatus = null;
-    PresenceConnectionAttempt += 1;
-    CurrentUser = null;
-
-    PresenceStates.clear();
-    RenderPresenceUsers();
-
-    if (PreviousConnectionRef) {
-        try {
-            await onDisconnect(PreviousConnectionRef).cancel();
-            await remove(PreviousConnectionRef);
-        } catch (Error) {
-            console.error("Presence Cleanup Failed:", Error);
+        if (!active.length) {
+            onlineUsersList.innerHTML = '<p class="empty-state">No one is online.</p>';
+            return;
         }
+
+        active.forEach((data) => {
+            const isAway = data.status === "away";
+            const name = data.displayName || "Anonymous";
+
+            const row = document.createElement("div");
+            row.className = "user-row";
+
+            const avatar = document.createElement("img");
+            avatar.className = "user-avatar";
+            avatar.alt = "";
+
+            setAvatar(avatar, data.profilePic);
+
+            const nameEl = document.createElement("span");
+            nameEl.className = "user-name";
+            nameEl.title = name;
+            nameEl.textContent = name;
+
+            const dot = document.createElement("span");
+            dot.className = `status ${isAway ? "status-away" : "status-online"}`;
+            dot.title = isAway ? "Away" : "Online";
+
+            row.append(avatar, nameEl, dot);
+            onlineUsersList.appendChild(row);
+        });
+    }, (err) => {
+        console.error("Error Loading Online Users:", err);
+    });
+}
+
+/* ---------- Lightbox ---------- */
+
+function openLightbox(imgSrc) {
+    if (!imageModal || !imageModalImg) return;
+    if (!isSafeImageSrc(imgSrc)) return;
+
+    imageModalImg.src = imgSrc;
+    imageModal.classList.remove("hidden");
+}
+
+function closeLightbox() {
+    if (!imageModal) return;
+
+    imageModal.classList.add("hidden");
+
+    if (imageModalImg) {
+        imageModalImg.src = "";
     }
 }
 
-function HandleBrowserStateChange() {
-    UpdatePresenceConnection();
+if (imageModalClose) {
+    imageModalClose.addEventListener("click", closeLightbox);
 }
 
-document.addEventListener("visibilitychange", HandleBrowserStateChange);
-window.addEventListener("focus", HandleBrowserStateChange);
-window.addEventListener("blur", HandleBrowserStateChange);
-
-// Chat
-
-function IsScrolledNearBottom(Element) {
-    return Element.scrollHeight - Element.scrollTop - Element.clientHeight < ScrollNearBottomPx;
+if (imageModal) {
+    imageModal.addEventListener("click", (e) => {
+        if (e.target === imageModal) {
+            closeLightbox();
+        }
+    });
 }
 
-function EnterEditMode(Element, Message) {
-    const Body = Element.querySelector(".message-body");
+/* ---------- Scroll ---------- */
 
-    if (!Body || Body.querySelector(".edit-form")) return;
+function isScrolledNearBottom(el) {
+    if (!el) return true;
 
-    const OriginalHtml = Body.innerHTML;
+    return el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_NEAR_BOTTOM_PX;
+}
 
-    Body.innerHTML = `
+/* ---------- Message Editing ---------- */
+
+function enterEditMode(div, msg) {
+    const body = div.querySelector(".message-body");
+
+    if (!body || body.querySelector(".edit-form")) return;
+
+    const original = body.innerHTML;
+
+    body.innerHTML = `
         <div class="edit-form">
-            <input type="text" class="edit-input" value="${EscapeHtml(Message.text || "")}">
+            <input type="text" class="edit-input" value="${escapeHtml(msg.text || "")}">
             <div class="edit-actions">
                 <button type="button" class="edit-save">Save</button>
                 <button type="button" class="edit-cancel">Cancel</button>
@@ -485,655 +398,889 @@ function EnterEditMode(Element, Message) {
         </div>
     `;
 
-    const Input = Body.querySelector(".edit-input");
+    const input = body.querySelector(".edit-input");
 
-    const Cancel = () => {
-        Body.innerHTML = OriginalHtml;
+    const cancel = () => {
+        body.innerHTML = original;
     };
 
-    const Save = async () => {
-        const NewText = Input.value.trim();
+    const save = async () => {
+        const newText = input.value.trim();
 
-        if (!NewText) return;
+        if (!newText) return;
 
-        if (NewText === Message.text) {
-            Cancel();
+        if (newText === msg.text) {
+            cancel();
             return;
         }
 
         try {
-            await updateDoc(doc(Db, "messages", Message.id), {
-                text: NewText,
+            await updateDoc(doc(db, "messages", msg.id), {
+                text: newText,
                 edited: true
             });
-        } catch (Error) {
-            console.error("Message Edit Failed:", Error);
-            alert("Could Not Save Your Edit. Please Try Again.");
+        } catch (err) {
+            console.error("Error Editing Message:", err);
+            alert("Could not save your edit. Please try again.");
         }
     };
 
-    Body.querySelector(".edit-save").addEventListener("click", Save);
-    Body.querySelector(".edit-cancel").addEventListener("click", Cancel);
+    body.querySelector(".edit-save").addEventListener("click", save);
+    body.querySelector(".edit-cancel").addEventListener("click", cancel);
 
-    Input.addEventListener("keydown", (Event) => {
-        if (Event.key === "Enter") Save();
+    input.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") save();
 
-        if (Event.key === "Escape") {
-            Event.stopPropagation();
-            Cancel();
+        if (event.key === "Escape") {
+            event.stopPropagation();
+            cancel();
         }
     });
 
-    Input.focus();
-    Input.setSelectionRange(Input.value.length, Input.value.length);
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
 }
 
-const MessageElements = new Map();
-const MessageData = new Map();
+/* ---------- Message State ---------- */
 
-let OldestMessageDoc = null;
-let PaginationStarted = false;
-let HasMoreOlderMessages = true;
-let IsLoadingOlderMessages = false;
+const messageElements = new Map();
+const messageData = new Map();
 
-function MessageTimestampMs(Message) {
-    return Message.createdAt?.toMillis
-        ? Message.createdAt.toMillis()
+let oldestMessageDoc = null;
+let paginationStarted = false;
+let hasMoreOlderMessages = true;
+let loadingOlderMessages = false;
+
+const paginatedMessageIds = new Set();
+
+let activeThreadId = null;
+let threadUnsub = null;
+
+function messageTimestampMs(msg) {
+    return msg.createdAt && msg.createdAt.toMillis
+        ? msg.createdAt.toMillis()
         : Date.now();
 }
 
-function IsMainFeedMessage(Message) {
-    return Boolean(Message.text || Message.imageUrl || Message.videoUrl);
+// Skips Thread Replies And Empty Messages. Call Announcements Are Kept.
+// Call.js Fills Their .call-widget-slot With The Live Widget.
+
+function isMainFeedMessage(msg) {
+    if (msg.threadId) return false;
+
+    if (msg.type === "call") {
+        return Boolean(msg.callId);
+    }
+
+    return Boolean(msg.text || msg.imageUrl || msg.videoUrl);
 }
 
-function BuildMessageNode(Message, Milliseconds) {
-    const Element = document.createElement("div");
+/* ---------- Build Message ---------- */
 
-    Element.className = "message";
-    Element.dataset.messageId = Message.id;
-    Element.dataset.ts = String(Milliseconds);
+function buildMessageNode(msg, ms, inThread = false) {
+    const div = document.createElement("div");
 
-    const IsOwn = Boolean(
-        Auth.currentUser &&
-        Message.uid === Auth.currentUser.uid
-    );
+    div.className = "message";
+    div.dataset.messageId = msg.id;
+    div.dataset.ts = String(ms);
 
-    let ContentHtml = "";
+    const isOwn = !!(auth.currentUser && msg.uid === auth.currentUser.uid);
+    const isCall = msg.type === "call";
+    const replyCount = Number(msg.replyCount) || 0;
 
-    if (Message.text) {
-        ContentHtml += `<span class="message-text">${FormatMessageText(Message.text)}</span>`;
+    let contentHtml = "";
 
-        if (Message.edited) {
-            ContentHtml += `<span class="edited-tag"> (edited)</span>`;
+    if (isCall) {
+        contentHtml += `<div class="call-widget-slot" data-call-id="${escapeHtml(msg.callId)}"></div>`;
+    }
+
+    if (msg.text) {
+        contentHtml += `<span class="message-text">${formatMessageText(msg.text)}</span>`;
+
+        if (msg.edited) {
+            contentHtml += '<span class="edited-tag"> (edited)</span>';
         }
     }
 
-    if (Message.imageUrl && IsSafeImageSrc(Message.imageUrl)) {
-        ContentHtml += `<div class="message-media"><img class="message-image" alt="Attached image"></div>`;
+    if (msg.imageUrl && isSafeImageSrc(msg.imageUrl)) {
+        contentHtml += '<div class="message-media"><img class="message-image" alt="Attached image"></div>';
     }
 
-    if (Message.videoUrl && IsSafeVideoSrc(Message.videoUrl)) {
-        ContentHtml += `<div class="message-media"><video class="message-video" controls preload="metadata"></video></div>`;
+    if (msg.videoUrl && isSafeVideoSrc(msg.videoUrl)) {
+        contentHtml += '<div class="message-media"><video class="message-video" controls preload="metadata"></video></div>';
     }
 
-    const EditButtonHtml = IsOwn && Message.text
-        ? `<button type="button" class="msg-action msg-edit-btn" title="Edit" aria-label="Edit message"><i class="fa-solid fa-pen"></i></button>`
+    const threadBtnHtml = (inThread || isCall)
+        ? ""
+        : '<button type="button" class="msg-action msg-thread-btn" title="Reply in thread" aria-label="Reply in thread"><i class="fa-regular fa-comment"></i></button>';
+
+    const editBtnHtml = (isOwn && msg.text && !isCall)
+        ? '<button type="button" class="msg-action msg-edit-btn" title="Edit" aria-label="Edit message"><i class="fa-solid fa-pen"></i></button>'
         : "";
 
-    Element.innerHTML = `
+    const repliesHtml = (!inThread && !isCall && replyCount > 0)
+        ? `<button type="button" class="thread-link"><i class="fa-regular fa-comment"></i>${replyCount} ${replyCount === 1 ? "reply" : "replies"}</button>`
+        : "";
+
+    div.innerHTML = `
         <img class="message-avatar" alt="">
+
         <div class="message-main">
             <div class="message-header">
-                <span class="message-name">${EscapeHtml(Message.displayName || "Anonymous")}</span>
+                <span class="message-name">${escapeHtml(msg.displayName || "Anonymous")}</span>
                 <time class="message-time"></time>
-                <div class="message-actions">${EditButtonHtml}</div>
+                <div class="message-actions">${threadBtnHtml}${editBtnHtml}</div>
             </div>
-            <div class="message-body">${ContentHtml}</div>
+
+            <div class="message-body">${contentHtml}</div>
+
+            ${repliesHtml}
         </div>
     `;
 
-    SetAvatar(Element.querySelector(".message-avatar"), Message.profilePic);
+    setAvatar(div.querySelector(".message-avatar"), msg.profilePic);
 
-    const TimeElement = Element.querySelector(".message-time");
+    const time = div.querySelector(".message-time");
 
-    TimeElement.textContent = FormatTime(Milliseconds);
-    TimeElement.dateTime = new Date(Milliseconds).toISOString();
-    TimeElement.title = new Date(Milliseconds).toLocaleString();
+    time.textContent = formatTime(ms);
+    time.dateTime = new Date(ms).toISOString();
+    time.title = new Date(ms).toLocaleString();
 
-    const Image = Element.querySelector(".message-image");
+    const image = div.querySelector(".message-image");
 
-    if (Image) {
-        Image.src = Message.imageUrl;
-        Image.addEventListener("click", () => OpenLightbox(Image.src));
+    if (image) {
+        image.src = msg.imageUrl;
+
+        image.addEventListener("click", () => {
+            openLightbox(image.src);
+        });
     }
 
-    const Video = Element.querySelector(".message-video");
+    const video = div.querySelector(".message-video");
 
-    if (Video) {
-        Video.src = Message.videoUrl;
+    if (video) {
+        video.src = msg.videoUrl;
     }
 
-    const EditButton = Element.querySelector(".msg-edit-btn");
+    const editBtn = div.querySelector(".msg-edit-btn");
 
-    if (EditButton) {
-        EditButton.addEventListener("click", () => EnterEditMode(Element, Message));
+    if (editBtn) {
+        editBtn.addEventListener("click", () => {
+            enterEditMode(div, msg);
+        });
     }
 
-    return Element;
+    const threadBtn = div.querySelector(".msg-thread-btn");
+
+    if (threadBtn) {
+        threadBtn.addEventListener("click", () => {
+            openThread(msg.id);
+        });
+    }
+
+    const threadLink = div.querySelector(".thread-link");
+
+    if (threadLink) {
+        threadLink.addEventListener("click", () => {
+            openThread(msg.id);
+        });
+    }
+
+    return div;
 }
 
-function InsertMessageNode(Node, Milliseconds) {
-    const ExistingNodes = MessageBox.querySelectorAll("[data-message-id]");
+/* ---------- Message Insertion ---------- */
 
-    for (const Existing of ExistingNodes) {
-        if (Milliseconds < Number(Existing.dataset.ts || 0)) {
-            MessageBox.insertBefore(Node, Existing);
+function insertMessageNode(node, ms) {
+    if (!messageBox) return;
+
+    const nodes = messageBox.querySelectorAll("[data-message-id]");
+
+    for (const existing of nodes) {
+        if (ms < Number(existing.dataset.ts || 0)) {
+            messageBox.insertBefore(node, existing);
             return;
         }
     }
 
-    MessageBox.appendChild(Node);
+    messageBox.appendChild(node);
 }
 
-function UpsertMessageElement(Message) {
-    const Milliseconds = MessageTimestampMs(Message);
+function upsertMessageElement(msg) {
+    const ms = messageTimestampMs(msg);
 
-    MessageData.set(Message.id, Message);
+    messageData.set(msg.id, msg);
 
-    const Existing = MessageElements.get(Message.id);
+    const existing = messageElements.get(msg.id);
 
-    if (Existing) {
-        const Rebuilt = BuildMessageNode(Message, Milliseconds);
+    if (existing) {
+        const rebuilt = buildMessageNode(msg, ms);
 
-        Existing.replaceWith(Rebuilt);
-        MessageElements.set(Message.id, Rebuilt);
+        existing.replaceWith(rebuilt);
+        messageElements.set(msg.id, rebuilt);
     } else {
-        const Node = BuildMessageNode(Message, Milliseconds);
+        const node = buildMessageNode(msg, ms);
 
-        MessageElements.set(Message.id, Node);
-        InsertMessageNode(Node, Milliseconds);
+        messageElements.set(msg.id, node);
+        insertMessageNode(node, ms);
+    }
+
+    if (msg.id === activeThreadId) {
+        renderThreadRoot();
     }
 }
 
-function RemoveMessageElement(Id) {
-    const Element = MessageElements.get(Id);
+function removeMessageElement(id) {
+    if (paginatedMessageIds.has(id)) return;
 
-    if (Element) Element.remove();
+    const node = messageElements.get(id);
 
-    MessageElements.delete(Id);
-    MessageData.delete(Id);
+    if (node) {
+        node.remove();
+    }
+
+    messageElements.delete(id);
+    messageData.delete(id);
 }
 
-function RefreshEmptyState() {
-    const EmptyState = MessageBox.querySelector(".empty-state");
+function refreshEmptyState() {
+    if (!messageBox) return;
 
-    if (MessageElements.size === 0) {
-        if (!EmptyState) {
-            MessageBox.innerHTML = '<p class="empty-state">No messages yet.</p>';
+    const emptyState = messageBox.querySelector(".empty-state");
+
+    if (messageElements.size === 0) {
+        if (!emptyState) {
+            messageBox.innerHTML = '<p class="empty-state">No messages yet.</p>';
         }
-    } else if (EmptyState) {
-        EmptyState.remove();
+    } else if (emptyState) {
+        emptyState.remove();
     }
 }
 
-async function LoadOlderMessages() {
+/* ---------- Message Pagination ---------- */
+
+async function loadOlderMessages() {
     if (
-        IsLoadingOlderMessages ||
-        !HasMoreOlderMessages ||
-        !OldestMessageDoc ||
-        !MessageBox
+        loadingOlderMessages ||
+        !hasMoreOlderMessages ||
+        !oldestMessageDoc ||
+        !messageBox
     ) {
         return;
     }
 
-    IsLoadingOlderMessages = true;
-    PaginationStarted = true;
+    loadingOlderMessages = true;
+    paginationStarted = true;
 
-    let AddedCount = 0;
+    let added = 0;
 
     try {
-        const MessageQuery = query(
-            collection(Db, "messages"),
+        const q = query(
+            collection(db, "messages"),
             orderBy("createdAt", "desc"),
-            startAfter(OldestMessageDoc),
-            limit(MessagePageSize)
+            startAfter(oldestMessageDoc),
+            limit(MESSAGE_PAGE_SIZE)
         );
 
-        const Snapshot = await getDocs(MessageQuery);
+        const snap = await getDocs(q);
 
-        if (Snapshot.empty) {
-            HasMoreOlderMessages = false;
+        if (snap.empty) {
+            hasMoreOlderMessages = false;
             return;
         }
 
-        OldestMessageDoc = Snapshot.docs[Snapshot.docs.length - 1];
+        oldestMessageDoc = snap.docs[snap.docs.length - 1];
 
-        if (Snapshot.docs.length < MessagePageSize) {
-            HasMoreOlderMessages = false;
+        if (snap.docs.length < MESSAGE_PAGE_SIZE) {
+            hasMoreOlderMessages = false;
         }
 
-        const PreviousHeight = MessageBox.scrollHeight;
+        const previousHeight = messageBox.scrollHeight;
 
-        [...Snapshot.docs].reverse().forEach((Document) => {
-            const Message = {
-                id: Document.id,
-                ...Document.data()
+        [...snap.docs].reverse().forEach((docSnap) => {
+            const msg = {
+                id: docSnap.id,
+                ...docSnap.data()
             };
 
-            if (
-                !IsMainFeedMessage(Message) ||
-                MessageElements.has(Message.id)
-            ) {
-                return;
-            }
+            if (!isMainFeedMessage(msg)) return;
+            if (messageElements.has(msg.id)) return;
 
-            MessageData.set(Message.id, Message);
+            paginatedMessageIds.add(msg.id);
+            messageData.set(msg.id, msg);
 
-            const Milliseconds = MessageTimestampMs(Message);
-            const Node = BuildMessageNode(Message, Milliseconds);
+            const ms = messageTimestampMs(msg);
+            const node = buildMessageNode(msg, ms);
 
-            MessageElements.set(Message.id, Node);
-            MessageBox.insertBefore(Node, MessageBox.firstChild);
+            messageElements.set(msg.id, node);
 
-            AddedCount += 1;
+            messageBox.insertBefore(node, messageBox.firstChild);
+
+            added += 1;
         });
 
-        MessageBox.scrollTop += MessageBox.scrollHeight - PreviousHeight;
+        messageBox.scrollTop += messageBox.scrollHeight - previousHeight;
 
-    } catch (Error) {
-        console.error("Older Messages Could Not Be Loaded:", Error);
+    } catch (err) {
+        console.error("Error Loading Older Messages:", err);
     } finally {
-        IsLoadingOlderMessages = false;
+        loadingOlderMessages = false;
     }
 
-    if (AddedCount === 0 && HasMoreOlderMessages) {
-        await LoadOlderMessages();
-    }
-}
-
-function HandleMessageScroll() {
-    if (MessageBox.scrollTop < ScrollNearTopPx) {
-        LoadOlderMessages();
+    if (added === 0 && hasMoreOlderMessages) {
+        loadOlderMessages();
     }
 }
 
-function InitChat() {
-    if (!MessageBox) return;
+function handleScrollForOlderMessages() {
+    if (messageBox.scrollTop < SCROLL_NEAR_TOP_PX) {
+        loadOlderMessages();
+    }
+}
 
-    const MessageQuery = query(
-        collection(Db, "messages"),
+/* ---------- Initialize Chat ---------- */
+
+function initChat() {
+    if (!messageBox) return;
+
+    const q = query(
+        collection(db, "messages"),
         orderBy("createdAt", "desc"),
-        limit(MessagePageSize)
+        limit(MESSAGE_PAGE_SIZE)
     );
 
-    onSnapshot(MessageQuery, (Snapshot) => {
-        if (!PaginationStarted) {
-            OldestMessageDoc =
-                Snapshot.docs[Snapshot.docs.length - 1] ||
-                OldestMessageDoc;
-
-            HasMoreOlderMessages = Snapshot.docs.length === MessagePageSize;
+    onSnapshot(q, (snapshot) => {
+        if (!paginationStarted) {
+            oldestMessageDoc = snapshot.docs[snapshot.docs.length - 1] || oldestMessageDoc;
         }
 
-        const ShouldStick = IsScrolledNearBottom(MessageBox);
+        const shouldStick = isScrolledNearBottom(messageBox);
 
-        Snapshot.docChanges().forEach((Change) => {
-            const Message = {
-                id: Change.doc.id,
-                ...Change.doc.data()
+        snapshot.docChanges().forEach((change) => {
+            const msg = {
+                id: change.doc.id,
+                ...change.doc.data()
             };
 
-            if (Change.type === "removed") {
-                RemoveMessageElement(Message.id);
+            if (change.type === "removed") {
+                removeMessageElement(msg.id);
                 return;
             }
 
-            if (!IsMainFeedMessage(Message)) {
-                RemoveMessageElement(Message.id);
-                return;
-            }
+            if (!isMainFeedMessage(msg)) return;
 
-            UpsertMessageElement(Message);
+            upsertMessageElement(msg);
         });
 
-        RefreshEmptyState();
+        refreshEmptyState();
 
-        if (ShouldStick) {
-            MessageBox.scrollTop = MessageBox.scrollHeight;
+        if (shouldStick) {
+            messageBox.scrollTop = messageBox.scrollHeight;
         }
-
-    }, (Error) => {
-        console.error("Chat Messages Could Not Be Loaded:", Error);
+    }, (err) => {
+        console.error("Error Loading Messages:", err);
     });
 
-    MessageBox.addEventListener("scroll", HandleMessageScroll);
+    messageBox.addEventListener("scroll", handleScrollForOlderMessages);
 }
 
-async function ClearAllMessages() {
-    const Snapshot = await getDocs(collection(Db, "messages"));
+/* ---------- Threads ---------- */
 
-    await Promise.all(
-        Snapshot.docs.map((Document) => (
-            deleteDoc(doc(Db, "messages", Document.id))
-        ))
+function renderThreadRoot() {
+    if (!threadRoot || !activeThreadId) return;
+
+    const root = messageData.get(activeThreadId);
+
+    threadRoot.innerHTML = "";
+
+    if (!root) return;
+
+    threadRoot.appendChild(
+        buildMessageNode(root, messageTimestampMs(root), true)
     );
 }
 
-const ModeratorCommands = {
-    "/clear msgs": ClearAllMessages
-};
+function renderThreadReplies(replies) {
+    if (!threadBox) return;
 
-function SetSending(Sending) {
-    IsSending = Sending;
+    threadBox.innerHTML = "";
 
-    if (SendButton) {
-        SendButton.disabled = Sending;
-        SendButton.textContent = Sending ? "Sending..." : "Send";
+    if (threadCount) {
+        threadCount.textContent = replies.length
+            ? `${replies.length} ${replies.length === 1 ? "reply" : "replies"}`
+            : "No replies";
     }
 
-    if (AttachButton) {
-        AttachButton.disabled = Sending;
-    }
-}
-
-async function GetImageKitAuth() {
-    const Response = await fetch(ImageKitAuthUrl, {
-        method: "GET",
-        headers: {
-            Accept: "application/json"
-        },
-        cache: "no-store"
-    });
-
-    if (!Response.ok) {
-        throw new Error("Image Upload Authentication Failed.");
-    }
-
-    const AuthData = await Response.json();
-
-    if (
-        !AuthData.token ||
-        !AuthData.expire ||
-        !AuthData.signature ||
-        !AuthData.publicKey
-    ) {
-        throw new Error("Image Upload Authentication Was Incomplete.");
-    }
-
-    return AuthData;
-}
-
-async function UploadMedia(File) {
-    const AuthData = await GetImageKitAuth();
-    const FormDataBody = new FormData();
-
-    FormDataBody.append("file", File);
-    FormDataBody.append("fileName", File.name);
-    FormDataBody.append("token", AuthData.token);
-    FormDataBody.append("expire", String(AuthData.expire));
-    FormDataBody.append("signature", AuthData.signature);
-    FormDataBody.append("publicKey", AuthData.publicKey);
-
-    const Response = await fetch(ImageKitUploadUrl, {
-        method: "POST",
-        body: FormDataBody
-    });
-
-    const Result = await Response.json().catch(() => ({}));
-
-    if (!Response.ok || !Result.url) {
-        throw new Error(Result.message || "Media Upload Failed.");
-    }
-
-    return Result.url;
-}
-
-async function SendChatMessage(Text, Attachment = null) {
-    const User = Auth.currentUser;
-
-    if (!User || IsSending) return;
-
-    const Command = Text
-        ? ModeratorCommands[Text.trim().toLowerCase()]
-        : null;
-
-    if (Command) {
-        if (!ModeratorUids.includes(User.uid)) {
-            alert("You Do Not Have Permission To Use This Command.");
-
-            if (MessageInput) MessageInput.value = "";
-
-            return;
-        }
-
-        SetSending(true);
-
-        try {
-            await Command();
-        } catch (Error) {
-            console.error("Moderator Command Failed:", Error);
-            alert("The Command Could Not Be Completed.");
-        } finally {
-            if (MessageInput) MessageInput.value = "";
-            SetSending(false);
-        }
-
+    if (!replies.length) {
+        threadBox.innerHTML = '<p class="empty-state">Start the thread below.</p>';
         return;
     }
 
-    if (!Text && !Attachment) return;
+    replies.forEach((reply) => {
+        threadBox.appendChild(
+            buildMessageNode(reply, messageTimestampMs(reply), true)
+        );
+    });
+}
 
-    SetSending(true);
+function openThread(id) {
+    const root = messageData.get(id);
+
+    if (!root || !threadPanel) return;
+
+    if (activeThreadId === id) {
+        if (threadInput) threadInput.focus();
+        return;
+    }
+
+    closeThread();
+
+    activeThreadId = id;
+
+    threadPanel.classList.remove("hidden");
+
+    renderThreadRoot();
+    renderThreadReplies([]);
+
+    const q = query(
+        collection(db, "messages"),
+        where("threadId", "==", id)
+    );
+
+    threadUnsub = onSnapshot(q, (snapshot) => {
+        const replies = snapshot.docs
+            .map((d) => ({
+                id: d.id,
+                ...d.data()
+            }))
+            .sort((a, b) => {
+                return messageTimestampMs(a) - messageTimestampMs(b);
+            });
+
+        const shouldStick = isScrolledNearBottom(threadBox);
+
+        renderThreadReplies(replies);
+
+        if (shouldStick && threadBox) {
+            threadBox.scrollTop = threadBox.scrollHeight;
+        }
+    }, (err) => {
+        console.error("Error Loading Thread:", err);
+    });
+
+    if (threadInput) threadInput.focus();
+}
+
+function closeThread() {
+    if (threadUnsub) {
+        threadUnsub();
+        threadUnsub = null;
+    }
+
+    activeThreadId = null;
+
+    if (threadPanel) {
+        threadPanel.classList.add("hidden");
+    }
+
+    if (threadRoot) {
+        threadRoot.innerHTML = "";
+    }
+
+    if (threadBox) {
+        threadBox.innerHTML = "";
+    }
+
+    if (threadInput) {
+        threadInput.value = "";
+    }
+}
+
+function setThreadSending(isSending) {
+    if (!threadSend) return;
+
+    threadSend.disabled = isSending;
+    threadSend.textContent = isSending ? "Sending…" : "Reply";
+}
+
+async function sendThreadReply(text) {
+    const user = auth.currentUser;
+    const rootId = activeThreadId;
+
+    if (!user || !rootId || !text) return;
+
+    setThreadSending(true);
 
     try {
-        await addDoc(collection(Db, "messages"), {
-            uid: User.uid,
-            displayName: CurrentDisplayName,
-            profilePic: CurrentProfilePic,
-            text: Text || "",
-            imageUrl: Attachment?.type === "image" ? Attachment.url : null,
-            videoUrl: Attachment?.type === "video" ? Attachment.url : null,
+        await addDoc(collection(db, "messages"), {
+            uid: user.uid,
+            displayName: currentDisplayName,
+            profilePic: currentProfilePic,
+            text,
+            imageUrl: null,
+            videoUrl: null,
+            threadId: rootId,
             createdAt: serverTimestamp()
         });
 
-        if (MessageInput) MessageInput.value = "";
-        if (ImageInput) ImageInput.value = "";
+        if (threadInput) {
+            threadInput.value = "";
+        }
 
-    } catch (Error) {
-        console.error("Message Send Failed:", Error);
-        alert("Your Message Could Not Be Sent. Please Try Again.");
+        try {
+            await updateDoc(doc(db, "messages", rootId), {
+                replyCount: increment(1),
+                lastReplyAt: serverTimestamp()
+            });
+        } catch (err) {
+            console.error("Error Updating Thread Count:", err);
+        }
+
+    } catch (error) {
+        console.error("Error Sending Reply:", error);
     } finally {
-        SetSending(false);
+        setThreadSending(false);
 
-        if (MessageInput) MessageInput.focus();
+        if (threadInput) {
+            threadInput.focus();
+        }
     }
 }
 
-async function SendUploadedMedia(Text, Attachment) {
-    const User = Auth.currentUser;
+if (threadClose) {
+    threadClose.addEventListener("click", closeThread);
+}
 
-    if (!User) {
-        throw new Error("You Must Be Signed In To Send Media.");
-    }
+if (threadForm) {
+    threadForm.addEventListener("submit", (event) => {
+        event.preventDefault();
 
-    await addDoc(collection(Db, "messages"), {
-        uid: User.uid,
-        displayName: CurrentDisplayName,
-        profilePic: CurrentProfilePic,
-        text: Text || "",
-        imageUrl: Attachment.type === "image" ? Attachment.url : null,
-        videoUrl: Attachment.type === "video" ? Attachment.url : null,
-        createdAt: serverTimestamp()
+        const text = threadInput.value.trim();
+
+        if (text) {
+            sendThreadReply(text);
+        }
     });
-
-    if (MessageInput) MessageInput.value = "";
 }
 
-async function HandleMediaFile(File) {
-    if (!File || IsSending) return;
+/* ---------- Sending ---------- */
 
-    const IsImage = File.type.startsWith("image/");
-    const IsVideo = File.type.startsWith("video/");
+async function clearAllMessages() {
+    const querySnapshot = await getDocs(collection(db, "messages"));
 
-    if (!IsImage && !IsVideo) {
-        alert("Please Choose An Image Or Video File.");
+    await Promise.all(
+        querySnapshot.docs.map((d) => {
+            return deleteDoc(doc(db, "messages", d.id));
+        })
+    );
+
+    closeThread();
+
+    messageElements.clear();
+    messageData.clear();
+    paginatedMessageIds.clear();
+
+    if (messageBox) {
+        messageBox.innerHTML = '<p class="empty-state">No messages yet.</p>';
+    }
+}
+
+const MODERATOR_COMMANDS = {
+    "/clear msgs": clearAllMessages
+};
+
+async function sendChatMessage(text, attachment = null) {
+    const user = auth.currentUser;
+
+    if (!user) return;
+
+    const command = text
+        ? MODERATOR_COMMANDS[text.trim().toLowerCase()]
+        : null;
+
+    if (command) {
+        if (!MODERATOR_UIDS.includes(user.uid)) {
+            alert("You do not have permission to use this command.");
+
+            if (messageInput) messageInput.value = "";
+
+            return;
+        }
+
+        try {
+            await command();
+        } catch (error) {
+            console.error("Error Running Command:", error);
+        } finally {
+            if (messageInput) messageInput.value = "";
+        }
+
         return;
     }
 
-    const MaxBytes = IsVideo ? MaxVideoBytes : MaxImageBytes;
-    const LimitLabel = IsVideo ? "35 MB" : "25 MB";
+    if (!text && !attachment) return;
 
-    if (File.size > MaxBytes) {
-        alert(`${IsVideo ? "Video" : "Image"} Is Too Large. The Limit Is ${LimitLabel}.`);
-
-        if (ImageInput) ImageInput.value = "";
-
-        return;
-    }
-
-    SetSending(true);
+    setSending(true);
 
     try {
-        const MediaUrl = await UploadMedia(File);
-        const Text = MessageInput?.value.trim() || "";
-
-        await SendUploadedMedia(Text, {
-            type: IsVideo ? "video" : "image",
-            url: MediaUrl
+        await addDoc(collection(db, "messages"), {
+            uid: user.uid,
+            displayName: currentDisplayName,
+            profilePic: currentProfilePic,
+            text: text || "",
+            imageUrl: attachment && attachment.type === "image"
+                ? attachment.url
+                : null,
+            videoUrl: attachment && attachment.type === "video"
+                ? attachment.url
+                : null,
+            createdAt: serverTimestamp()
         });
 
-    } catch (Error) {
-        console.error("Media Upload Failed:", Error);
-        alert("Your Media Could Not Be Uploaded. Please Try Again.");
+        if (messageInput) {
+            messageInput.value = "";
+        }
+
+        if (imageInput) {
+            imageInput.value = "";
+        }
+
+    } catch (error) {
+        console.error("Error Sending Message:", error);
     } finally {
-        if (ImageInput) ImageInput.value = "";
+        setSending(false);
 
-        SetSending(false);
-
-        if (MessageInput) MessageInput.focus();
+        if (messageInput) {
+            messageInput.focus();
+        }
     }
 }
 
-if (AttachButton && ImageInput) {
-    AttachButton.addEventListener("click", () => {
-        if (!IsSending) ImageInput.click();
+function setSending(isSending) {
+    if (!sendButton) return;
+
+    sendButton.disabled = isSending;
+    sendButton.textContent = isSending ? "Sending…" : "Send";
+}
+
+/* ---------- Media Attachments ---------- */
+
+function handleMediaFile(file) {
+    if (!file) return;
+
+    const isImage = file.type.startsWith("image/");
+    const isVideo = file.type.startsWith("video/");
+
+    if (!isImage && !isVideo) {
+        alert("Please choose an image or video file.");
+        return;
+    }
+
+    const maxBytes = isVideo ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
+
+    if (file.size > maxBytes) {
+        const limitLabel = isVideo ? "4MB" : "5MB";
+
+        alert(
+            `${isVideo ? "Video" : "Image"} is too large. Please choose one under ${limitLabel}.`
+        );
+
+        return;
+    }
+
+    const reader = new FileReader();
+
+    reader.onload = (uploadEvent) => {
+        const dataUrl = uploadEvent.target.result;
+        const text = messageInput ? messageInput.value.trim() : "";
+
+        sendChatMessage(text, {
+            type: isVideo ? "video" : "image",
+            url: dataUrl
+        });
+    };
+
+    reader.onerror = () => {
+        console.error("Error Reading Media File.");
+        alert("Could not read this file. Please try again.");
+    };
+
+    reader.readAsDataURL(file);
+}
+
+if (attachButton && imageInput) {
+    attachButton.addEventListener("click", () => {
+        imageInput.click();
     });
 
-    ImageInput.addEventListener("change", (Event) => {
-        HandleMediaFile(Event.target.files?.[0]);
+    imageInput.addEventListener("change", (e) => {
+        handleMediaFile(e.target.files[0]);
     });
 }
 
-if (MessageInput) {
-    MessageInput.addEventListener("paste", (Event) => {
-        const Items = Event.clipboardData?.items || [];
+if (messageInput) {
+    messageInput.addEventListener("paste", (event) => {
+        const clipboard = event.clipboardData;
 
-        for (const Item of Items) {
+        if (!clipboard) return;
+
+        const items = clipboard.items;
+
+        for (const item of items) {
             if (
-                Item.kind === "file" &&
+                item.kind === "file" &&
                 (
-                    Item.type.startsWith("image/") ||
-                    Item.type.startsWith("video/")
+                    item.type.startsWith("image/") ||
+                    item.type.startsWith("video/")
                 )
             ) {
-                Event.preventDefault();
-                HandleMediaFile(Item.getAsFile());
+                event.preventDefault();
+
+                handleMediaFile(item.getAsFile());
+
                 break;
             }
         }
     });
 }
 
-if (MessageForm) {
-    MessageForm.addEventListener("submit", (Event) => {
-        Event.preventDefault();
+/* ---------- Message Form ---------- */
 
-        const Text = MessageInput?.value.trim() || "";
+if (messageForm) {
+    messageForm.addEventListener("submit", (event) => {
+        event.preventDefault();
 
-        if (Text) SendChatMessage(Text);
+        const text = messageInput.value.trim();
+
+        if (text) {
+            sendChatMessage(text);
+        }
     });
-} else if (SendButton) {
-    SendButton.addEventListener("click", () => {
-        const Text = MessageInput?.value.trim() || "";
+} else if (sendButton) {
+    sendButton.addEventListener("click", () => {
+        const text = messageInput ? messageInput.value.trim() : "";
 
-        if (Text) SendChatMessage(Text);
+        if (text) {
+            sendChatMessage(text);
+        }
     });
 
-    if (MessageInput) {
-        MessageInput.addEventListener("keydown", (Event) => {
-            if (Event.key === "Enter" && !Event.shiftKey) {
-                Event.preventDefault();
+    if (messageInput) {
+        messageInput.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
 
-                const Text = MessageInput.value.trim();
+                const text = messageInput.value.trim();
 
-                if (Text) SendChatMessage(Text);
+                if (text) {
+                    sendChatMessage(text);
+                }
             }
         });
     }
 }
 
-// Account
+/* ---------- Session ---------- */
 
-function GetInitialCachedAccount(Uid) {
+function getInitialCachedAccount(uid) {
     try {
-        const Raw = localStorage.getItem(`aurora_account_${Uid}`);
+        const raw = localStorage.getItem(`aurora_account_${uid}`);
 
-        if (!Raw) return null;
+        if (!raw) return null;
 
-        return JSON.parse(Raw).data;
+        return JSON.parse(raw).data;
 
     } catch {
         return null;
     }
 }
 
-onAuthStateChanged(Auth, async (User) => {
-    if (!User) {
-        await StopPresence();
+onAuthStateChanged(auth, async (user) => {
+    if (!user) {
         window.location.href = "../";
         return;
     }
 
-    const CachedAccount = GetInitialCachedAccount(User.uid);
+    const cached = getInitialCachedAccount(user.uid);
 
-    if (CachedAccount) {
-        ApplyUserData(CachedAccount);
+    if (cached) {
+        applyUserData(cached);
     }
 
     try {
-        const { data } = await loadAccount(Db, User.uid, {
-            onFresh: (FreshAccount) => {
-                ApplyUserData(FreshAccount);
+        const { data } = await loadAccount(db, user.uid, {
+            onFresh: (fresh) => {
+                applyUserData(fresh);
             }
         });
 
         if (data) {
-            ApplyUserData(data);
+            applyUserData(data);
         }
 
-    } catch (Error) {
-        console.error("Account Data Could Not Be Loaded:", Error);
+    } catch (error) {
+        console.error("Failed To Load User Data:", error);
     }
 
-    StartPresence(User);
-    InitChat();
+    setupPresence(user);
+    initOnlineUsersList();
+    initChat();
 });
 
-// Logout
+/* ---------- Logout ---------- */
 
-if (LogoutButton) {
-    LogoutButton.addEventListener("click", async () => {
-        try {
-            await StopPresence();
-            await signOut(Auth);
+if (logoutButton) {
+    logoutButton.addEventListener("click", async () => {
+        const user = auth.currentUser;
 
-            localStorage.clear();
-
-            window.location.href = "../";
-
-        } catch (Error) {
-            console.error("Logout Failed:", Error);
-            alert("Could Not Log Out. Please Try Again.");
+        if (user) {
+            await setDoc(doc(db, "status", user.uid), {
+                status: "offline",
+                lastChanged: serverTimestamp()
+            }, { merge: true });
         }
+
+        if (presenceInterval) {
+            clearInterval(presenceInterval);
+            presenceInterval = null;
+        }
+
+        if (presenceUnsubscribe) {
+            presenceUnsubscribe();
+            presenceUnsubscribe = null;
+        }
+
+        if (presenceListenersAttached) {
+            document.removeEventListener("visibilitychange", handlePresenceChange);
+        }
+
+        await signOut(auth);
+
+        localStorage.clear();
+
+        window.location.href = "../";
     });
 }
+
+/* ---------- Settings ---------- */
+
+if (settingsButton) {
+    settingsButton.addEventListener("click", () => {
+        window.location.href = "/aurora/settings/account/";
+    });
+}
+
+/* ---------- Keyboard Shortcuts ---------- */
+
+document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+
+    if (imageModal && !imageModal.classList.contains("hidden")) {
+        closeLightbox();
+    } else if (
+        activeThreadId &&
+        !document.activeElement?.classList.contains("edit-input")
+    ) {
+        closeThread();
+    }
+});
