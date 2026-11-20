@@ -12,8 +12,6 @@
     <link rel="stylesheet" href="../style.css">
 </head>
 <body>
-    <canvas id="drawingCanvas"></canvas>
-
     <main class="container">
         <h1>Site Is Currently Being Remade</h1>
 
@@ -28,10 +26,6 @@
 
         <p class="notice">
             You'll Have To Sign Up Again After Maintenance.
-        </p>
-
-        <p class="drawing-note">
-            You Can Draw On This Page To Leave A Note Or Message Btw.
         </p>
     </main>
 
@@ -52,128 +46,6 @@
 
         updateDowntime();
         setInterval(updateDowntime, 1000);
-
-        const canvas = document.getElementById("drawingCanvas");
-        const context = canvas.getContext("2d");
-        const storageKey = "maintenanceDrawing";
-
-        let drawing = false;
-        let lastX = 0;
-        let lastY = 0;
-        let saveTimeout;
-
-        function resizeCanvas() {
-            const savedDrawing = canvas.toDataURL("image/png");
-            const hadDrawing = localStorage.getItem(storageKey);
-
-            const image = new Image();
-
-            canvas.width = window.innerWidth * window.devicePixelRatio;
-            canvas.height = window.innerHeight * window.devicePixelRatio;
-
-            context.setTransform(
-                window.devicePixelRatio,
-                0,
-                0,
-                window.devicePixelRatio,
-                0,
-                0
-            );
-
-            context.lineWidth = 2;
-            context.lineCap = "round";
-            context.lineJoin = "round";
-            context.strokeStyle = "#ffffff";
-
-            if (hadDrawing) {
-                image.onload = () => {
-                    context.drawImage(image, 0, 0, window.innerWidth, window.innerHeight);
-                };
-
-                image.src = hadDrawing;
-            }
-        }
-
-        function saveDrawing() {
-            clearTimeout(saveTimeout);
-
-            saveTimeout = setTimeout(() => {
-                try {
-                    localStorage.setItem(storageKey, canvas.toDataURL("image/png"));
-                } catch (error) {
-                    console.warn("Unable To Save Drawing.");
-                }
-            }, 200);
-        }
-
-        function getPosition(event) {
-            return {
-                x: event.clientX,
-                y: event.clientY
-            };
-        }
-
-        function startDrawing(event) {
-            if (event.button !== 0 && event.pointerType === "mouse") return;
-
-            drawing = true;
-
-            const position = getPosition(event);
-
-            lastX = position.x;
-            lastY = position.y;
-
-            canvas.setPointerCapture(event.pointerId);
-
-            context.beginPath();
-            context.moveTo(lastX, lastY);
-        }
-
-        function draw(event) {
-            if (!drawing) return;
-
-            const position = getPosition(event);
-
-            context.beginPath();
-            context.moveTo(lastX, lastY);
-            context.lineTo(position.x, position.y);
-            context.stroke();
-
-            lastX = position.x;
-            lastY = position.y;
-
-            saveDrawing();
-        }
-
-        function stopDrawing() {
-            if (!drawing) return;
-
-            drawing = false;
-            saveDrawing();
-        }
-
-        canvas.addEventListener("pointerdown", startDrawing);
-        canvas.addEventListener("pointermove", draw);
-        canvas.addEventListener("pointerup", stopDrawing);
-        canvas.addEventListener("pointercancel", stopDrawing);
-        canvas.addEventListener("lostpointercapture", stopDrawing);
-
-        window.addEventListener("resize", resizeCanvas);
-
-        const savedDrawing = localStorage.getItem(storageKey);
-
-        if (savedDrawing) {
-            const image = new Image();
-
-            image.onload = () => {
-                context.drawImage(image, 0, 0, window.innerWidth, window.innerHeight);
-            };
-
-            resizeCanvas();
-            image.src = savedDrawing;
-        } else {
-            resizeCanvas();
-        }
     </script>
 </body>
 </html>
