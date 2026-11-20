@@ -1,5 +1,12 @@
+
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
-import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
+
+import {
+    getAuth,
+    onAuthStateChanged,
+    signOut
+} from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
+
 import {
     getFirestore,
     doc,
@@ -15,6 +22,18 @@ import {
     deleteDoc,
     updateDoc
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+
+import {
+    getDatabase,
+    ref,
+    push,
+    set,
+    remove,
+    onValue,
+    onDisconnect,
+    serverTimestamp as RealtimeServerTimestamp
+} from "https://www.gstatic.com/firebasejs/11.0.0/firebase-database.js";
+
 import { loadAccount } from "../account-store.js";
 
 const FirebaseConfig = {
@@ -24,7 +43,8 @@ const FirebaseConfig = {
     storageBucket: "aurora-9e0fe.firebasestorage.app",
     messagingSenderId: "1023486645506",
     appId: "1:1023486645506:web:c64a98ebf0c3c817e01e1b",
-    measurementId: "G-3XVQTC189X"
+    measurementId: "G-3XVQTC189X",
+    databaseURL: "https://aurora-9e0fe-default-rtdb.firebaseio.com"
 };
 
 const ModeratorUids = [
@@ -44,6 +64,7 @@ const MessagePageSize = 30;
 const App = initializeApp(FirebaseConfig);
 const Auth = getAuth(App);
 const Db = getFirestore(App);
+const RealtimeDb = getDatabase(App);
 
 const LogoutButton = document.getElementById("logout-button");
 const MessageBox = document.getElementById("message-box");
@@ -56,11 +77,24 @@ const ImageModal = document.getElementById("image-modal");
 const ImageModalImg = document.getElementById("image-modal-img");
 const ImageModalClose = document.getElementById("image-modal-close");
 
+const OnlineCount = document.getElementById("online-count");
+const OnlineUsersList = document.getElementById("online-users-list");
+
 const DefaultAvatar = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2366665f'><path d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z'/></svg>";
 
 let CurrentDisplayName = "Anonymous";
 let CurrentProfilePic = DefaultAvatar;
 let IsSending = false;
+
+let CurrentUser = null;
+let PresenceConnectionRef = null;
+let PresenceConnectionListener = null;
+let PresenceRootListener = null;
+let PresenceConnected = false;
+let CurrentConnectionStatus = null;
+let PresenceConnectionAttempt = 0;
+
+const PresenceStates = new Map();
 
 function EscapeHtml(Value) {
     if (Value === null || Value === undefined) return "";
@@ -100,6 +134,7 @@ function FormatMessageText(Value) {
 
     return Escaped.replace(UrlRegex, (Url) => {
         const SafeUrl = EscapeHtml(Url);
+
         return `<a href="${SafeUrl}" target="_blank" rel="noopener noreferrer">${SafeUrl}</a>`;
     });
 }
@@ -107,6 +142,7 @@ function FormatMessageText(Value) {
 function FormatTime(Milliseconds) {
     const DateValue = new Date(Milliseconds);
     const Now = new Date();
+
     const Time = DateValue.toLocaleTimeString([], {
         hour: "numeric",
         minute: "2-digit"
@@ -143,6 +179,8 @@ function ApplyUserData(UserData) {
     CurrentProfilePic = IsSafeImageSrc(UserData?.profilePic)
         ? UserData.profilePic
         : DefaultAvatar;
+
+    UpdatePresenceConnection(true);
 }
 
 function OpenLightbox(ImageSrc) {
@@ -171,10 +209,260 @@ if (ImageModal) {
 }
 
 document.addEventListener("keydown", (Event) => {
-    if (Event.key === "Escape" && ImageModal && !ImageModal.classList.contains("hidden")) {
+    if (
+        Event.key === "Escape" &&
+        ImageModal &&
+        !ImageModal.classList.contains("hidden")
+    ) {
         CloseLightbox();
     }
 });
+
+// Presence
+
+function GetBrowserStatus() {
+    return document.visibilityState === "visible" && document.hasFocus()
+        ? "online"
+        : "away";
+}
+
+async function UpdatePresenceConnection(Force = false) {
+    if (
+        !CurrentUser ||
+        !PresenceConnectionRef ||
+        !PresenceConnected
+    ) {
+        return;
+    }
+
+    const Status = GetBrowserStatus();
+
+    if (!Force && CurrentConnectionStatus === Status) {
+        return;
+    }
+
+    try {
+        await set(PresenceConnectionRef, {
+            status: Status,
+            displayName: CurrentDisplayName,
+            profilePic: CurrentProfilePic,
+            lastChanged: RealtimeServerTimestamp()
+        });
+
+        CurrentConnectionStatus = Status;
+
+    } catch (Error) {
+        console.error("Presence Update Failed:", Error);
+    }
+}
+
+function GetPresenceStatus(Connections) {
+    const ConnectionList = Object.values(Connections || {});
+
+    if (ConnectionList.some((Connection) => Connection.status === "online")) {
+        return "online";
+    }
+
+    if (ConnectionList.some((Connection) => Connection.status === "away")) {
+        return "away";
+    }
+
+    return "offline";
+}
+
+function RenderPresenceUsers() {
+    if (!OnlineUsersList) return;
+
+    const Users = Array.from(PresenceStates.entries())
+        .map(([Uid, Data]) => ({
+            uid: Uid,
+            ...Data
+        }))
+        .filter((User) => (
+            User.status === "online" ||
+            User.status === "away"
+        ))
+        .sort((First, Second) => {
+            if (First.status !== Second.status) {
+                return First.status === "online" ? -1 : 1;
+            }
+
+            return First.displayName.localeCompare(Second.displayName);
+        });
+
+    const OnlineUsers = Users.filter((User) => User.status === "online");
+
+    if (OnlineCount) {
+        OnlineCount.textContent = `(${OnlineUsers.length})`;
+    }
+
+    OnlineUsersList.replaceChildren();
+
+    Users.forEach((User) => {
+        const UserElement = document.createElement("div");
+        UserElement.className = `PresenceUser Presence${User.status === "online" ? "Online" : "Away"}`;
+
+        const Avatar = document.createElement("img");
+        Avatar.className = "PresenceAvatar";
+        Avatar.alt = "";
+        SetAvatar(Avatar, User.profilePic);
+
+        const Details = document.createElement("div");
+        Details.className = "PresenceDetails";
+
+        const Name = document.createElement("span");
+        Name.className = "PresenceName";
+        Name.textContent = User.displayName || "Anonymous";
+
+        const Status = document.createElement("span");
+        Status.className = `PresenceStatus PresenceStatus${User.status === "online" ? "Online" : "Away"}`;
+        Status.textContent = User.status === "online" ? "Online" : "Away";
+
+        const Indicator = document.createElement("span");
+        Indicator.className = `PresenceIndicator PresenceIndicator${User.status === "online" ? "Online" : "Away"}`;
+        Indicator.setAttribute("aria-hidden", "true");
+
+        Details.append(Name, Status);
+        UserElement.append(Avatar, Details, Indicator);
+
+        OnlineUsersList.appendChild(UserElement);
+    });
+}
+
+function HandlePresenceSnapshot(Snapshot) {
+    const PresenceData = Snapshot.val() || {};
+
+    PresenceStates.clear();
+
+    Object.entries(PresenceData).forEach(([Uid, UserPresence]) => {
+        const Connections = UserPresence?.connections || {};
+        const ConnectionList = Object.values(Connections);
+
+        if (ConnectionList.length === 0) return;
+
+        const Status = GetPresenceStatus(Connections);
+
+        if (Status === "offline") return;
+
+        const PreferredConnection =
+            ConnectionList.find((Connection) => Connection.status === "online") ||
+            ConnectionList[0];
+
+        PresenceStates.set(Uid, {
+            status: Status,
+            displayName: PreferredConnection.displayName || "Anonymous",
+            profilePic: IsSafeImageSrc(PreferredConnection.profilePic)
+                ? PreferredConnection.profilePic
+                : DefaultAvatar
+        });
+    });
+
+    RenderPresenceUsers();
+}
+
+function StartPresence(User) {
+    if (!User) return;
+
+    if (CurrentUser?.uid === User.uid && PresenceConnectionRef) {
+        return;
+    }
+
+    StopPresence();
+
+    CurrentUser = User;
+    PresenceConnected = false;
+    CurrentConnectionStatus = null;
+
+    const ConnectionsRef = ref(
+        RealtimeDb,
+        `presence/${User.uid}/connections`
+    );
+
+    PresenceConnectionRef = push(ConnectionsRef);
+
+    PresenceRootListener = onValue(
+        ref(RealtimeDb, "presence"),
+        HandlePresenceSnapshot,
+        (Error) => {
+            console.error("Presence Listener Failed:", Error);
+        }
+    );
+
+    PresenceConnectionListener = onValue(
+        ref(RealtimeDb, ".info/connected"),
+        async (Snapshot) => {
+            PresenceConnected = Snapshot.val() === true;
+
+            if (!PresenceConnected) {
+                PresenceConnectionAttempt += 1;
+                CurrentConnectionStatus = null;
+                return;
+            }
+
+            const Attempt = ++PresenceConnectionAttempt;
+
+            try {
+                await onDisconnect(PresenceConnectionRef).remove();
+
+                if (
+                    !PresenceConnected ||
+                    Attempt !== PresenceConnectionAttempt
+                ) {
+                    return;
+                }
+
+                CurrentConnectionStatus = null;
+
+                await UpdatePresenceConnection(true);
+
+            } catch (Error) {
+                console.error("Presence Connection Failed:", Error);
+            }
+        }
+    );
+}
+
+async function StopPresence() {
+    if (PresenceConnectionListener) {
+        PresenceConnectionListener();
+        PresenceConnectionListener = null;
+    }
+
+    if (PresenceRootListener) {
+        PresenceRootListener();
+        PresenceRootListener = null;
+    }
+
+    const PreviousConnectionRef = PresenceConnectionRef;
+
+    PresenceConnectionRef = null;
+    PresenceConnected = false;
+    CurrentConnectionStatus = null;
+    PresenceConnectionAttempt += 1;
+    CurrentUser = null;
+
+    PresenceStates.clear();
+    RenderPresenceUsers();
+
+    if (PreviousConnectionRef) {
+        try {
+            await onDisconnect(PreviousConnectionRef).cancel();
+            await remove(PreviousConnectionRef);
+        } catch (Error) {
+            console.error("Presence Cleanup Failed:", Error);
+        }
+    }
+}
+
+function HandleBrowserStateChange() {
+    UpdatePresenceConnection();
+}
+
+document.addEventListener("visibilitychange", HandleBrowserStateChange);
+window.addEventListener("focus", HandleBrowserStateChange);
+window.addEventListener("blur", HandleBrowserStateChange);
+
+// Chat
 
 function IsScrolledNearBottom(Element) {
     return Element.scrollHeight - Element.scrollTop - Element.clientHeight < ScrollNearBottomPx;
@@ -182,6 +470,7 @@ function IsScrolledNearBottom(Element) {
 
 function EnterEditMode(Element, Message) {
     const Body = Element.querySelector(".message-body");
+
     if (!Body || Body.querySelector(".edit-form")) return;
 
     const OriginalHtml = Body.innerHTML;
@@ -197,6 +486,7 @@ function EnterEditMode(Element, Message) {
     `;
 
     const Input = Body.querySelector(".edit-input");
+
     const Cancel = () => {
         Body.innerHTML = OriginalHtml;
     };
@@ -258,11 +548,16 @@ function IsMainFeedMessage(Message) {
 
 function BuildMessageNode(Message, Milliseconds) {
     const Element = document.createElement("div");
+
     Element.className = "message";
     Element.dataset.messageId = Message.id;
     Element.dataset.ts = String(Milliseconds);
 
-    const IsOwn = Boolean(Auth.currentUser && Message.uid === Auth.currentUser.uid);
+    const IsOwn = Boolean(
+        Auth.currentUser &&
+        Message.uid === Auth.currentUser.uid
+    );
+
     let ContentHtml = "";
 
     if (Message.text) {
@@ -300,6 +595,7 @@ function BuildMessageNode(Message, Milliseconds) {
     SetAvatar(Element.querySelector(".message-avatar"), Message.profilePic);
 
     const TimeElement = Element.querySelector(".message-time");
+
     TimeElement.textContent = FormatTime(Milliseconds);
     TimeElement.dateTime = new Date(Milliseconds).toISOString();
     TimeElement.title = new Date(Milliseconds).toLocaleString();
@@ -312,7 +608,10 @@ function BuildMessageNode(Message, Milliseconds) {
     }
 
     const Video = Element.querySelector(".message-video");
-    if (Video) Video.src = Message.videoUrl;
+
+    if (Video) {
+        Video.src = Message.videoUrl;
+    }
 
     const EditButton = Element.querySelector(".msg-edit-btn");
 
@@ -338,16 +637,19 @@ function InsertMessageNode(Node, Milliseconds) {
 
 function UpsertMessageElement(Message) {
     const Milliseconds = MessageTimestampMs(Message);
+
     MessageData.set(Message.id, Message);
 
     const Existing = MessageElements.get(Message.id);
 
     if (Existing) {
         const Rebuilt = BuildMessageNode(Message, Milliseconds);
+
         Existing.replaceWith(Rebuilt);
         MessageElements.set(Message.id, Rebuilt);
     } else {
         const Node = BuildMessageNode(Message, Milliseconds);
+
         MessageElements.set(Message.id, Node);
         InsertMessageNode(Node, Milliseconds);
     }
@@ -386,6 +688,7 @@ async function LoadOlderMessages() {
 
     IsLoadingOlderMessages = true;
     PaginationStarted = true;
+
     let AddedCount = 0;
 
     try {
@@ -417,7 +720,10 @@ async function LoadOlderMessages() {
                 ...Document.data()
             };
 
-            if (!IsMainFeedMessage(Message) || MessageElements.has(Message.id)) {
+            if (
+                !IsMainFeedMessage(Message) ||
+                MessageElements.has(Message.id)
+            ) {
                 return;
             }
 
@@ -428,10 +734,12 @@ async function LoadOlderMessages() {
 
             MessageElements.set(Message.id, Node);
             MessageBox.insertBefore(Node, MessageBox.firstChild);
+
             AddedCount += 1;
         });
 
         MessageBox.scrollTop += MessageBox.scrollHeight - PreviousHeight;
+
     } catch (Error) {
         console.error("Older Messages Could Not Be Loaded:", Error);
     } finally {
@@ -460,7 +768,10 @@ function InitChat() {
 
     onSnapshot(MessageQuery, (Snapshot) => {
         if (!PaginationStarted) {
-            OldestMessageDoc = Snapshot.docs[Snapshot.docs.length - 1] || OldestMessageDoc;
+            OldestMessageDoc =
+                Snapshot.docs[Snapshot.docs.length - 1] ||
+                OldestMessageDoc;
+
             HasMoreOlderMessages = Snapshot.docs.length === MessagePageSize;
         }
 
@@ -490,6 +801,7 @@ function InitChat() {
         if (ShouldStick) {
             MessageBox.scrollTop = MessageBox.scrollHeight;
         }
+
     }, (Error) => {
         console.error("Chat Messages Could Not Be Loaded:", Error);
     });
@@ -501,7 +813,9 @@ async function ClearAllMessages() {
     const Snapshot = await getDocs(collection(Db, "messages"));
 
     await Promise.all(
-        Snapshot.docs.map((Document) => deleteDoc(doc(Db, "messages", Document.id)))
+        Snapshot.docs.map((Document) => (
+            deleteDoc(doc(Db, "messages", Document.id))
+        ))
     );
 }
 
@@ -586,7 +900,9 @@ async function SendChatMessage(Text, Attachment = null) {
     if (Command) {
         if (!ModeratorUids.includes(User.uid)) {
             alert("You Do Not Have Permission To Use This Command.");
+
             if (MessageInput) MessageInput.value = "";
+
             return;
         }
 
@@ -622,51 +938,11 @@ async function SendChatMessage(Text, Attachment = null) {
 
         if (MessageInput) MessageInput.value = "";
         if (ImageInput) ImageInput.value = "";
+
     } catch (Error) {
         console.error("Message Send Failed:", Error);
         alert("Your Message Could Not Be Sent. Please Try Again.");
     } finally {
-        SetSending(false);
-
-        if (MessageInput) MessageInput.focus();
-    }
-}
-
-async function HandleMediaFile(File) {
-    if (!File || IsSending) return;
-
-    const IsImage = File.type.startsWith("image/");
-    const IsVideo = File.type.startsWith("video/");
-
-    if (!IsImage && !IsVideo) {
-        alert("Please Choose An Image Or Video File.");
-        return;
-    }
-
-    const MaxBytes = IsVideo ? MaxVideoBytes : MaxImageBytes;
-    const LimitLabel = IsVideo ? "35 MB" : "25 MB";
-
-    if (File.size > MaxBytes) {
-        alert(`${IsVideo ? "Video" : "Image"} Is Too Large. The Limit Is ${LimitLabel}.`);
-        if (ImageInput) ImageInput.value = "";
-        return;
-    }
-
-    SetSending(true);
-
-    try {
-        const MediaUrl = await UploadMedia(File);
-        const Text = MessageInput?.value.trim() || "";
-
-        await SendUploadedMedia(Text, {
-            type: IsVideo ? "video" : "image",
-            url: MediaUrl
-        });
-    } catch (Error) {
-        console.error("Media Upload Failed:", Error);
-        alert("Your Media Could Not Be Uploaded. Please Try Again.");
-    } finally {
-        if (ImageInput) ImageInput.value = "";
         SetSending(false);
 
         if (MessageInput) MessageInput.focus();
@@ -693,6 +969,51 @@ async function SendUploadedMedia(Text, Attachment) {
     if (MessageInput) MessageInput.value = "";
 }
 
+async function HandleMediaFile(File) {
+    if (!File || IsSending) return;
+
+    const IsImage = File.type.startsWith("image/");
+    const IsVideo = File.type.startsWith("video/");
+
+    if (!IsImage && !IsVideo) {
+        alert("Please Choose An Image Or Video File.");
+        return;
+    }
+
+    const MaxBytes = IsVideo ? MaxVideoBytes : MaxImageBytes;
+    const LimitLabel = IsVideo ? "35 MB" : "25 MB";
+
+    if (File.size > MaxBytes) {
+        alert(`${IsVideo ? "Video" : "Image"} Is Too Large. The Limit Is ${LimitLabel}.`);
+
+        if (ImageInput) ImageInput.value = "";
+
+        return;
+    }
+
+    SetSending(true);
+
+    try {
+        const MediaUrl = await UploadMedia(File);
+        const Text = MessageInput?.value.trim() || "";
+
+        await SendUploadedMedia(Text, {
+            type: IsVideo ? "video" : "image",
+            url: MediaUrl
+        });
+
+    } catch (Error) {
+        console.error("Media Upload Failed:", Error);
+        alert("Your Media Could Not Be Uploaded. Please Try Again.");
+    } finally {
+        if (ImageInput) ImageInput.value = "";
+
+        SetSending(false);
+
+        if (MessageInput) MessageInput.focus();
+    }
+}
+
 if (AttachButton && ImageInput) {
     AttachButton.addEventListener("click", () => {
         if (!IsSending) ImageInput.click();
@@ -710,7 +1031,10 @@ if (MessageInput) {
         for (const Item of Items) {
             if (
                 Item.kind === "file" &&
-                (Item.type.startsWith("image/") || Item.type.startsWith("video/"))
+                (
+                    Item.type.startsWith("image/") ||
+                    Item.type.startsWith("video/")
+                )
             ) {
                 Event.preventDefault();
                 HandleMediaFile(Item.getAsFile());
@@ -725,11 +1049,13 @@ if (MessageForm) {
         Event.preventDefault();
 
         const Text = MessageInput?.value.trim() || "";
+
         if (Text) SendChatMessage(Text);
     });
 } else if (SendButton) {
     SendButton.addEventListener("click", () => {
         const Text = MessageInput?.value.trim() || "";
+
         if (Text) SendChatMessage(Text);
     });
 
@@ -739,18 +1065,23 @@ if (MessageForm) {
                 Event.preventDefault();
 
                 const Text = MessageInput.value.trim();
+
                 if (Text) SendChatMessage(Text);
             }
         });
     }
 }
 
+// Account
+
 function GetInitialCachedAccount(Uid) {
     try {
         const Raw = localStorage.getItem(`aurora_account_${Uid}`);
+
         if (!Raw) return null;
 
         return JSON.parse(Raw).data;
+
     } catch {
         return null;
     }
@@ -758,6 +1089,7 @@ function GetInitialCachedAccount(Uid) {
 
 onAuthStateChanged(Auth, async (User) => {
     if (!User) {
+        await StopPresence();
         window.location.href = "../";
         return;
     }
@@ -770,23 +1102,35 @@ onAuthStateChanged(Auth, async (User) => {
 
     try {
         const { data } = await loadAccount(Db, User.uid, {
-            onFresh: (FreshAccount) => ApplyUserData(FreshAccount)
+            onFresh: (FreshAccount) => {
+                ApplyUserData(FreshAccount);
+            }
         });
 
-        if (data) ApplyUserData(data);
+        if (data) {
+            ApplyUserData(data);
+        }
+
     } catch (Error) {
         console.error("Account Data Could Not Be Loaded:", Error);
     }
 
+    StartPresence(User);
     InitChat();
 });
+
+// Logout
 
 if (LogoutButton) {
     LogoutButton.addEventListener("click", async () => {
         try {
+            await StopPresence();
             await signOut(Auth);
+
             localStorage.clear();
+
             window.location.href = "../";
+
         } catch (Error) {
             console.error("Logout Failed:", Error);
             alert("Could Not Log Out. Please Try Again.");
