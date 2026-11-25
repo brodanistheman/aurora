@@ -5,25 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Aurora</title>
     <link rel="stylesheet" href="css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
     <main class="Page">
-        <div class="AuthContainer">
-            <div class="Logo">Aurora</div>
-
-            <div class="AuthHeader">
+        <div class="Modal">
+            <div class="ModalHeader">
                 <h1 id="AuthTitle">Sign In</h1>
-                <p id="AuthDescription">Welcome Back</p>
-            </div>
-
-            <div class="AuthTabs">
-                <button class="AuthTab Active" id="SignInTab" type="button">
-                    Sign In
-                </button>
-
-                <button class="AuthTab" id="SignUpTab" type="button">
-                    Sign Up
-                </button>
+                <p id="AuthDescription">Enter Your Account Details</p>
             </div>
 
             <form id="SignInForm" class="AuthForm">
@@ -32,7 +23,7 @@
                     <input
                         id="SignInEmail"
                         type="email"
-                        placeholder="Enter Your Email"
+                        placeholder="Email Address"
                         autocomplete="email"
                         required
                     >
@@ -43,7 +34,7 @@
                     <input
                         id="SignInPassword"
                         type="password"
-                        placeholder="Enter Your Password"
+                        placeholder="Password"
                         autocomplete="current-password"
                         required
                     >
@@ -60,8 +51,9 @@
                     <input
                         id="SignUpUsername"
                         type="text"
-                        placeholder="Choose A Username"
+                        placeholder="Username"
                         autocomplete="username"
+                        minlength="3"
                         maxlength="20"
                         required
                     >
@@ -72,7 +64,7 @@
                     <input
                         id="SignUpEmail"
                         type="email"
-                        placeholder="Enter Your Email"
+                        placeholder="Email Address"
                         autocomplete="email"
                         required
                     >
@@ -83,7 +75,7 @@
                     <input
                         id="SignUpPassword"
                         type="password"
-                        placeholder="Create A Password"
+                        placeholder="Password"
                         autocomplete="new-password"
                         minlength="6"
                         required
@@ -95,13 +87,15 @@
                 </button>
             </form>
 
-            <div class="AuthFooter">
+            <div id="AuthMessage" class="AuthMessage Hidden"></div>
+
+            <div class="ModalFooter">
                 <span id="AuthFooterText">Don't Have An Account?</span>
-                <button id="FooterToggle" type="button">Sign Up</button>
+                <button id="AuthToggle" type="button">Sign Up</button>
             </div>
         </div>
     </main>
 
-    <script src="js/script.js"></script>
+    <script type="module" src="js/script.js"></script>
 </body>
 </html>
