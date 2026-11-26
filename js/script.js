@@ -171,6 +171,7 @@ SignUpForm.addEventListener("submit", async (Event) => {
                 Email: User.email,
                 AvatarUrl: null,
                 CreatedAt: serverTimestamp(),
+                UpdatedAt: serverTimestamp(),
                 LastActive: serverTimestamp()
             });
         });
