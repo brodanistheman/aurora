@@ -206,15 +206,16 @@ SignInForm.addEventListener("submit", async (Event) => {
     try {
         const UserCredential = await signInWithEmailAndPassword(Auth, Email, Password);
 
-        SignInForm.reset();
-
         try {
             await updateDoc(doc(Db, "Users", UserCredential.user.uid), {
                 LastActive: serverTimestamp()
             });
         } catch (Error) {
             SignInMessage.textContent = "Your Account Is Signed In, But Your Activity Could Not Be Updated.";
+            return;
         }
+
+        SignInForm.reset();
     } catch (Error) {
         if (
             Error.code === "auth/user-not-found" ||
