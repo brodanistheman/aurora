@@ -51,12 +51,6 @@ function SetButtonState(Button, Disabled, Text) {
     Button.textContent = Text;
 }
 
-function LogFirebaseError(Context, Error) {
-    console.error(`${Context} Error Code:`, Error.code);
-    console.error(`${Context} Error Message:`, Error.message);
-    console.error(`${Context} Error Details:`, Error);
-}
-
 function GetAuthMessage(Code) {
     const Messages = {
         "auth/email-already-in-use": "This Email Address Is Already Registered.",
@@ -68,7 +62,7 @@ function GetAuthMessage(Code) {
         "auth/too-many-requests": "Too Many Attempts. Please Try Again Later.",
         "auth/network-request-failed": "Please Check Your Internet Connection.",
         "auth/operation-not-allowed": "Email And Password Sign In Is Not Enabled.",
-        "auth/invalid-api-key": "The Firebase Configuration Is Invalid.",
+        "auth/api-key-not-valid.-please-pass-a-valid-api-key.": "The Firebase Configuration Is Invalid.",
         "auth/app-not-authorized": "This Website Is Not Authorized To Use Firebase Authentication.",
         "auth/requests-to-this-api-identitytoolkit-method-are-blocked": "Firebase Authentication Requests Are Currently Blocked.",
         "auth/quota-exceeded": "The Authentication Request Limit Has Been Reached. Please Try Again Later."
@@ -93,8 +87,6 @@ async function LoadAuthenticatedUser(User) {
         AuthenticatedMessage.textContent = `Signed In As ${UserData.DisplayName}`;
         ShowView("Authenticated");
     } catch (Error) {
-        LogFirebaseError("Load Account", Error);
-
         AuthenticatedMessage.textContent = "Unable To Load Your Account.";
         ShowView("Authenticated");
     }
@@ -181,14 +173,10 @@ SignUpForm.addEventListener("submit", async (Event) => {
 
         await LoadAuthenticatedUser(User);
     } catch (Error) {
-        LogFirebaseError("Signup", Error);
-
         if (UserCredential && !ProfileCreated) {
             try {
                 await deleteUser(UserCredential.user);
             } catch (DeleteError) {
-                LogFirebaseError("Account Cleanup", DeleteError);
-
                 SignUpMessage.textContent = "Account Cleanup Could Not Be Completed. Please Contact Support.";
                 return;
             }
@@ -225,11 +213,9 @@ SignInForm.addEventListener("submit", async (Event) => {
                 LastActive: serverTimestamp()
             });
         } catch (Error) {
-            LogFirebaseError("Last Active Update", Error);
+            SignInMessage.textContent = "Your Account Is Signed In, But Your Activity Could Not Be Updated.";
         }
     } catch (Error) {
-        LogFirebaseError("Signin", Error);
-
         if (
             Error.code === "auth/user-not-found" ||
             Error.code === "auth/wrong-password" ||
@@ -250,7 +236,6 @@ SignOutButton.addEventListener("click", async () => {
     try {
         await signOut(Auth);
     } catch (Error) {
-        LogFirebaseError("Signout", Error);
         AuthenticatedMessage.textContent = "Unable To Sign Out. Please Try Again.";
     } finally {
         SetButtonState(SignOutButton, false, "Sign Out");
