@@ -35,21 +35,16 @@ button {
     position: fixed;
     inset: 0;
     z-index: 10;
+    display: flex;
     align-items: center;
     justify-content: center;
     padding: 24px;
     background: rgba(0, 0, 0, 0.88);
 }
 
-.AuthContainer:not([hidden]) {
-    display: flex;
-}
-
 .AuthModal {
     width: 100%;
     max-width: 420px;
-    max-height: calc(100vh - 48px);
-    overflow-y: auto;
     padding: 36px;
     background: #0b0b0b;
 }
@@ -94,7 +89,7 @@ button {
     height: 46px;
     padding: 0 13px;
     border: 1px solid #242424;
-    border-radius: 5px;
+    border-radius: 0;
     outline: none;
     background: #090909;
     color: #ededed;
@@ -115,7 +110,7 @@ button {
     height: 46px;
     margin-top: 15px;
     border: none;
-    border-radius: 5px;
+    border-radius: 0;
     background: #ededed;
     color: #000;
     font-weight: 600;
@@ -166,11 +161,22 @@ button {
 
 @media (max-width: 600px) {
     .AuthContainer {
+        align-items: flex-start;
         padding: 16px;
     }
 
     .AuthModal {
-        max-height: calc(100vh - 32px);
+        margin: auto 0;
         padding: 28px 22px;
+    }
+
+    .AuthContainer:has(#SignUpView:not([hidden])) {
+        position: absolute;
+        min-height: 100%;
+        align-items: flex-start;
+    }
+
+    .AuthContainer:has(#SignUpView:not([hidden])) .AuthModal {
+        margin: 16px 0;
     }
 }
