@@ -45,6 +45,14 @@ const ProfileDisplayName = document.getElementById("ProfileDisplayName");
 const ProfileAvatarFile = document.getElementById("ProfileAvatarFile");
 const ProfileAvatarPreview = document.getElementById("ProfileAvatarPreview");
 
+const AvatarCropModal = document.getElementById("AvatarCropModal");
+const AvatarCropViewport = AvatarCropModal.querySelector(".AvatarCropViewport");
+const AvatarCropImageElement = AvatarCropModal.querySelector(".AvatarCropImage");
+const AvatarCropZoom = AvatarCropModal.querySelector("#AvatarCropZoom");
+const AvatarCropClose = AvatarCropModal.querySelector(".AvatarCropClose");
+const AvatarCropCancel = AvatarCropModal.querySelector(".AvatarCropCancel");
+const AvatarCropSave = AvatarCropModal.querySelector(".AvatarCropSave");
+
 const ImageKitAuthEndpoint = "https://aurora-imagekit-auth.4dapple.workers.dev/auth";
 const ImageKitUploadEndpoint = "https://upload.imagekit.io/api/v1/files/upload";
 
@@ -62,6 +70,18 @@ let CurrentUser = null;
 let CurrentAvatarUrl = null;
 let SelectedAvatarFile = null;
 let AvatarPreviewUrl = null;
+let AvatarCropImage = null;
+let AvatarCropObjectUrl = null;
+let AvatarCropBaseScale = 1;
+let AvatarCropScale = 1;
+let AvatarCropOffsetX = 0;
+let AvatarCropOffsetY = 0;
+let AvatarCropDragging = false;
+let AvatarCropPointerX = 0;
+let AvatarCropPointerY = 0;
+let AvatarCropStartX = 0;
+let AvatarCropStartY = 0;
+let SelectedAvatarBlob = null;
 
 function ShowView(View) {
     SignInView.hidden = View !== "SignIn";
@@ -161,6 +181,126 @@ function SetAvatarPreviewFromFile(File) {
     ProfileAvatarPreview.hidden = false;
 }
 
+function UpdateAvatarCropPosition() {
+    if (!AvatarCropImage) return;
+
+    const Width = AvatarCropImage.naturalWidth * AvatarCropBaseScale * AvatarCropScale;
+    const Height = AvatarCropImage.naturalHeight * AvatarCropBaseScale * AvatarCropScale;
+    const Size = AvatarCropViewport.clientWidth;
+
+    AvatarCropOffsetX = Math.min(
+        (Width - Size) / 2,
+        Math.max((Size - Width) / 2, AvatarCropOffsetX)
+    );
+
+    AvatarCropOffsetY = Math.min(
+        (Height - Size) / 2,
+        Math.max((Size - Height) / 2, AvatarCropOffsetY)
+    );
+
+    AvatarCropImageElement.style.width = `${Width}px`;
+    AvatarCropImageElement.style.height = `${Height}px`;
+    AvatarCropImageElement.style.left = `calc(50% - ${Width / 2}px + ${AvatarCropOffsetX}px)`;
+    AvatarCropImageElement.style.top = `calc(50% - ${Height / 2}px + ${AvatarCropOffsetY}px)`;
+}
+
+function CloseAvatarCrop() {
+    AvatarCropModal.hidden = true;
+    AvatarCropDragging = false;
+
+    if (AvatarCropObjectUrl) {
+        URL.revokeObjectURL(AvatarCropObjectUrl);
+        AvatarCropObjectUrl = null;
+    }
+
+    AvatarCropImage = null;
+    ProfileAvatarFile.value = "";
+}
+
+function OpenAvatarCrop(File) {
+    if (AvatarCropObjectUrl) {
+        URL.revokeObjectURL(AvatarCropObjectUrl);
+    }
+
+    AvatarCropObjectUrl = URL.createObjectURL(File);
+
+    const Image = new Image();
+
+    Image.onload = () => {
+        AvatarCropImage = Image;
+
+        AvatarCropBaseScale = Math.max(
+            AvatarCropViewport.clientWidth / Image.naturalWidth,
+            AvatarCropViewport.clientHeight / Image.naturalHeight
+        );
+
+        AvatarCropScale = 1;
+        AvatarCropOffsetX = 0;
+        AvatarCropOffsetY = 0;
+        AvatarCropZoom.value = "1";
+        AvatarCropImageElement.src = AvatarCropObjectUrl;
+        AvatarCropModal.hidden = false;
+
+        UpdateAvatarCropPosition();
+    };
+
+    Image.onerror = () => {
+        ProfileMessage.textContent = "This Image Could Not Be Opened.";
+        CloseAvatarCrop();
+    };
+
+    Image.src = AvatarCropObjectUrl;
+}
+
+function CreateCroppedAvatar() {
+    if (!AvatarCropImage) {
+        throw new Error("AvatarUploadFailed");
+    }
+
+    const Size = AvatarCropViewport.clientWidth;
+    const OutputSize = 512;
+    const Scale = AvatarCropBaseScale * AvatarCropScale;
+    const SourceSize = Size / Scale;
+
+    const SourceX =
+        (AvatarCropImage.naturalWidth - SourceSize) / 2 -
+        AvatarCropOffsetX / Scale;
+
+    const SourceY =
+        (AvatarCropImage.naturalHeight - SourceSize) / 2 -
+        AvatarCropOffsetY / Scale;
+
+    const Canvas = document.createElement("canvas");
+    Canvas.width = OutputSize;
+    Canvas.height = OutputSize;
+
+    Canvas.getContext("2d").drawImage(
+        AvatarCropImage,
+        SourceX,
+        SourceY,
+        SourceSize,
+        SourceSize,
+        0,
+        0,
+        OutputSize,
+        OutputSize
+    );
+
+    return new Promise((Resolve, Reject) => {
+        Canvas.toBlob(
+            (Blob) => {
+                if (Blob) {
+                    Resolve(Blob);
+                } else {
+                    Reject(new Error("AvatarUploadFailed"));
+                }
+            },
+            "image/jpeg",
+            0.92
+        );
+    });
+}
+
 async function UploadAvatar(File, User) {
     const AuthResponse = await fetch(ImageKitAuthEndpoint, {
         method: "GET",
@@ -182,12 +322,7 @@ async function UploadAvatar(File, User) {
         throw new Error("AvatarUploadFailed");
     }
 
-    const Extension = AllowedAvatarTypes[File.type];
-
-    if (!Extension) {
-        throw new Error("AvatarUploadFailed");
-    }
-
+    const Extension = "jpg";
     const FormDataBody = new FormData();
 
     FormDataBody.append("file", File);
@@ -303,6 +438,7 @@ async function LoadAuthenticatedUser(User) {
 
         CurrentAvatarUrl = ProfileData.AvatarUrl || null;
         SelectedAvatarFile = null;
+        SelectedAvatarBlob = null;
         ProfileAvatarFile.value = "";
 
         UpdateAvatarPreview(CurrentAvatarUrl);
@@ -332,30 +468,94 @@ ProfileAvatarFile.addEventListener("change", () => {
     ProfileMessage.textContent = "";
     ProfileMessage.style.color = "";
 
-    if (!File) {
-        SelectedAvatarFile = null;
-        UpdateAvatarPreview(CurrentAvatarUrl);
-        return;
-    }
+    if (!File) return;
 
     if (!AllowedAvatarTypes[File.type]) {
         ProfileMessage.textContent = "Please Select A PNG, JPG, WebP, Or GIF Image.";
         ProfileAvatarFile.value = "";
-        SelectedAvatarFile = null;
-        UpdateAvatarPreview(CurrentAvatarUrl);
         return;
     }
 
     if (File.size > MaximumAvatarSize) {
         ProfileMessage.textContent = "Your Avatar Must Be Smaller Than 5 MB.";
         ProfileAvatarFile.value = "";
-        SelectedAvatarFile = null;
-        UpdateAvatarPreview(CurrentAvatarUrl);
         return;
     }
 
-    SelectedAvatarFile = File;
-    SetAvatarPreviewFromFile(File);
+    OpenAvatarCrop(File);
+});
+
+AvatarCropZoom.addEventListener("input", () => {
+    AvatarCropScale = Number(AvatarCropZoom.value);
+    UpdateAvatarCropPosition();
+});
+
+AvatarCropViewport.addEventListener("pointerdown", (Event) => {
+    if (!AvatarCropImage) return;
+
+    AvatarCropDragging = true;
+    AvatarCropPointerX = Event.clientX;
+    AvatarCropPointerY = Event.clientY;
+    AvatarCropStartX = AvatarCropOffsetX;
+    AvatarCropStartY = AvatarCropOffsetY;
+
+    AvatarCropViewport.setPointerCapture(Event.pointerId);
+});
+
+AvatarCropViewport.addEventListener("pointermove", (Event) => {
+    if (!AvatarCropDragging) return;
+
+    AvatarCropOffsetX =
+        AvatarCropStartX + Event.clientX - AvatarCropPointerX;
+
+    AvatarCropOffsetY =
+        AvatarCropStartY + Event.clientY - AvatarCropPointerY;
+
+    UpdateAvatarCropPosition();
+});
+
+AvatarCropViewport.addEventListener("pointerup", () => {
+    AvatarCropDragging = false;
+});
+
+AvatarCropViewport.addEventListener("pointercancel", () => {
+    AvatarCropDragging = false;
+});
+
+function CancelAvatarCrop() {
+    CloseAvatarCrop();
+}
+
+AvatarCropClose.addEventListener("click", CancelAvatarCrop);
+AvatarCropCancel.addEventListener("click", CancelAvatarCrop);
+
+AvatarCropModal.addEventListener("click", (Event) => {
+    if (Event.target === AvatarCropModal) {
+        CancelAvatarCrop();
+    }
+});
+
+AvatarCropSave.addEventListener("click", async () => {
+    AvatarCropSave.disabled = true;
+    AvatarCropSave.textContent = "Preparing...";
+
+    try {
+        SelectedAvatarBlob = await CreateCroppedAvatar();
+
+        SelectedAvatarFile = new File(
+            [SelectedAvatarBlob],
+            `avatar_${Date.now()}.jpg`,
+            { type: "image/jpeg" }
+        );
+
+        SetAvatarPreviewFromFile(SelectedAvatarFile);
+        CloseAvatarCrop();
+    } catch (Error) {
+        ProfileMessage.textContent = "Unable To Prepare This Avatar. Please Try Again.";
+    } finally {
+        AvatarCropSave.disabled = false;
+        AvatarCropSave.textContent = "Use Avatar";
+    }
 });
 
 SignUpForm.addEventListener("submit", async (Event) => {
@@ -581,6 +781,7 @@ ProfileForm.addEventListener("submit", async (Event) => {
 
         CurrentAvatarUrl = AvatarUrl;
         SelectedAvatarFile = null;
+        SelectedAvatarBlob = null;
         ProfileAvatarFile.value = "";
 
         UpdateAvatarPreview(CurrentAvatarUrl);
@@ -620,6 +821,7 @@ onAuthStateChanged(Auth, async (User) => {
         CurrentUser = null;
         CurrentAvatarUrl = null;
         SelectedAvatarFile = null;
+        SelectedAvatarBlob = null;
 
         UpdateAvatarPreview(null);
 

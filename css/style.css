@@ -259,6 +259,146 @@ button {
     margin-top: 30px;
 }
 
+.AvatarCropModal {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow-y: auto;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.88);
+}
+
+.AvatarCropModal[hidden] {
+    display: none;
+}
+
+.AvatarCropDialog {
+    width: 100%;
+    max-width: 390px;
+    padding: 26px;
+    background: #0b0b0b;
+}
+
+.AvatarCropHeader {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20px;
+    margin-bottom: 22px;
+}
+
+.AvatarCropHeader h2 {
+    margin: 0 0 7px;
+    font-size: 18px;
+    font-weight: 500;
+}
+
+.AvatarCropHeader p {
+    margin: 0;
+    color: #858585;
+    font-size: 12px;
+}
+
+.AvatarCropClose {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #858585;
+    font-size: 23px;
+    line-height: 1;
+}
+
+.AvatarCropClose:hover {
+    color: #ededed;
+}
+
+.AvatarCropViewport {
+    position: relative;
+    width: min(100%, 300px);
+    aspect-ratio: 1;
+    margin: 0 auto;
+    overflow: hidden;
+    background: #151515;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+}
+
+.AvatarCropViewport:active {
+    cursor: grabbing;
+}
+
+.AvatarCropImage {
+    position: absolute;
+    max-width: none;
+    max-height: none;
+    pointer-events: none;
+    user-select: none;
+}
+
+.AvatarCropControls {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 23px;
+}
+
+.AvatarCropControls label {
+    color: #bcbcbc;
+    font-size: 12px;
+}
+
+.AvatarCropControls input {
+    width: 100%;
+    height: 18px;
+    margin: 0;
+    accent-color: #ededed;
+    cursor: pointer;
+}
+
+.AvatarCropActions {
+    display: flex;
+    gap: 10px;
+    margin-top: 24px;
+}
+
+.AvatarCropActions button {
+    width: 50%;
+    height: 42px;
+    border: 0;
+    border-radius: 0;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.AvatarCropCancel {
+    background: #191919;
+    color: #ededed;
+}
+
+.AvatarCropCancel:hover {
+    background: #242424;
+}
+
+.AvatarCropSave {
+    background: #ededed;
+    color: #000;
+}
+
+.AvatarCropSave:hover {
+    background: #d2d2d2;
+}
+
+.AvatarCropActions button:disabled {
+    cursor: wait;
+    opacity: 0.6;
+}
+
 [hidden] {
     display: none !important;
 }
@@ -274,5 +414,9 @@ button {
 
     .AuthContainer.SignUpMode .AuthModal {
         margin: 16px auto;
+    }
+
+    .AvatarCropDialog {
+        padding: 22px;
     }
 }
