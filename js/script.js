@@ -48,6 +48,8 @@ function ShowView(View) {
 
     SignInMessage.textContent = "";
     SignUpMessage.textContent = "";
+
+    window.scrollTo(0, 0);
 }
 
 function SetButtonState(Button, Disabled, Text) {
