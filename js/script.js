@@ -16,6 +16,8 @@ import {
     updateDoc
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 
+const AuthContainer = document.querySelector(".AuthContainer");
+
 const SignInView = document.getElementById("SignInView");
 const SignUpView = document.getElementById("SignUpView");
 const AuthenticatedView = document.getElementById("AuthenticatedView");
@@ -86,9 +88,11 @@ async function LoadAuthenticatedUser(User) {
 
         AuthenticatedMessage.textContent = `Signed In As ${UserData.DisplayName}`;
         ShowView("Authenticated");
+        AuthContainer.hidden = false;
     } catch (Error) {
         AuthenticatedMessage.textContent = "Unable To Load Your Account.";
         ShowView("Authenticated");
+        AuthContainer.hidden = false;
     }
 }
 
@@ -168,10 +172,10 @@ SignUpForm.addEventListener("submit", async (Event) => {
         });
 
         ProfileCreated = true;
-        SignUpForm.reset();
-        SignUpInProgress = false;
 
         await LoadAuthenticatedUser(User);
+
+        SignUpForm.reset();
     } catch (Error) {
         if (UserCredential && !ProfileCreated) {
             try {
@@ -252,5 +256,6 @@ onAuthStateChanged(Auth, async (User) => {
         await LoadAuthenticatedUser(User);
     } else {
         ShowView("SignIn");
+        AuthContainer.hidden = false;
     }
 });
