@@ -1,4 +1,3 @@
-
 import { Auth, Db } from "./firebase.js";
 
 import {
@@ -36,7 +35,7 @@ const AuthenticatedMessage = document.getElementById("AuthenticatedMessage");
 const ShowSignUp = document.getElementById("ShowSignUp");
 const ShowSignIn = document.getElementById("ShowSignIn");
 
-let SignupInProgress = false;
+let SignUpInProgress = false;
 
 function ShowView(View) {
     SignInView.hidden = View !== "SignIn";
@@ -52,6 +51,12 @@ function SetButtonState(Button, Disabled, Text) {
     Button.textContent = Text;
 }
 
+function LogFirebaseError(Context, Error) {
+    console.error(`${Context} Error Code:`, Error.code);
+    console.error(`${Context} Error Message:`, Error.message);
+    console.error(`${Context} Error Details:`, Error);
+}
+
 function GetAuthMessage(Code) {
     const Messages = {
         "auth/email-already-in-use": "This Email Address Is Already Registered.",
@@ -62,7 +67,11 @@ function GetAuthMessage(Code) {
         "auth/weak-password": "Your Password Is Too Weak.",
         "auth/too-many-requests": "Too Many Attempts. Please Try Again Later.",
         "auth/network-request-failed": "Please Check Your Internet Connection.",
-        "auth/operation-not-allowed": "Email And Password Sign In Is Not Enabled."
+        "auth/operation-not-allowed": "Email And Password Sign In Is Not Enabled.",
+        "auth/invalid-api-key": "The Firebase Configuration Is Invalid.",
+        "auth/app-not-authorized": "This Website Is Not Authorized To Use Firebase Authentication.",
+        "auth/requests-to-this-api-identitytoolkit-method-are-blocked": "Firebase Authentication Requests Are Currently Blocked.",
+        "auth/quota-exceeded": "The Authentication Request Limit Has Been Reached. Please Try Again Later."
     };
 
     return Messages[Code] || "Something Went Wrong. Please Try Again.";
@@ -74,6 +83,7 @@ async function LoadAuthenticatedUser(User) {
         const UserSnapshot = await getDoc(UserRef);
 
         if (!UserSnapshot.exists()) {
+            AuthenticatedMessage.textContent = "Your Account Profile Could Not Be Found.";
             await signOut(Auth);
             return;
         }
@@ -83,6 +93,8 @@ async function LoadAuthenticatedUser(User) {
         AuthenticatedMessage.textContent = `Signed In As ${UserData.DisplayName}`;
         ShowView("Authenticated");
     } catch (Error) {
+        LogFirebaseError("Load Account", Error);
+
         AuthenticatedMessage.textContent = "Unable To Load Your Account.";
         ShowView("Authenticated");
     }
@@ -127,10 +139,11 @@ SignUpForm.addEventListener("submit", async (Event) => {
         return;
     }
 
-    SignupInProgress = true;
+    SignUpInProgress = true;
     SetButtonState(SignUpButton, true, "Creating Account...");
 
     let UserCredential = null;
+    let ProfileCreated = false;
 
     try {
         UserCredential = await createUserWithEmailAndPassword(Auth, Email, Password);
@@ -162,15 +175,20 @@ SignUpForm.addEventListener("submit", async (Event) => {
             });
         });
 
+        ProfileCreated = true;
         SignUpForm.reset();
+        SignUpInProgress = false;
 
-        SignupInProgress = false;
         await LoadAuthenticatedUser(User);
     } catch (Error) {
-        if (UserCredential) {
+        LogFirebaseError("Signup", Error);
+
+        if (UserCredential && !ProfileCreated) {
             try {
                 await deleteUser(UserCredential.user);
             } catch (DeleteError) {
+                LogFirebaseError("Account Cleanup", DeleteError);
+
                 SignUpMessage.textContent = "Account Cleanup Could Not Be Completed. Please Contact Support.";
                 return;
             }
@@ -182,7 +200,7 @@ SignUpForm.addEventListener("submit", async (Event) => {
             SignUpMessage.textContent = GetAuthMessage(Error.code);
         }
     } finally {
-        SignupInProgress = false;
+        SignUpInProgress = false;
         SetButtonState(SignUpButton, false, "Create Account");
     }
 });
@@ -200,13 +218,23 @@ SignInForm.addEventListener("submit", async (Event) => {
     try {
         const UserCredential = await signInWithEmailAndPassword(Auth, Email, Password);
 
-        await updateDoc(doc(Db, "Users", UserCredential.user.uid), {
-            LastActive: serverTimestamp()
-        });
-
         SignInForm.reset();
+
+        try {
+            await updateDoc(doc(Db, "Users", UserCredential.user.uid), {
+                LastActive: serverTimestamp()
+            });
+        } catch (Error) {
+            LogFirebaseError("Last Active Update", Error);
+        }
     } catch (Error) {
-        if (Error.code === "auth/user-not-found" || Error.code === "auth/wrong-password") {
+        LogFirebaseError("Signin", Error);
+
+        if (
+            Error.code === "auth/user-not-found" ||
+            Error.code === "auth/wrong-password" ||
+            Error.code === "auth/invalid-credential"
+        ) {
             SignInMessage.textContent = "The Email Or Password Is Incorrect.";
         } else {
             SignInMessage.textContent = GetAuthMessage(Error.code);
@@ -222,6 +250,7 @@ SignOutButton.addEventListener("click", async () => {
     try {
         await signOut(Auth);
     } catch (Error) {
+        LogFirebaseError("Signout", Error);
         AuthenticatedMessage.textContent = "Unable To Sign Out. Please Try Again.";
     } finally {
         SetButtonState(SignOutButton, false, "Sign Out");
@@ -229,7 +258,7 @@ SignOutButton.addEventListener("click", async () => {
 });
 
 onAuthStateChanged(Auth, async (User) => {
-    if (SignupInProgress) {
+    if (SignUpInProgress) {
         return;
     }
 
