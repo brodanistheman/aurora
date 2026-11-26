@@ -42,11 +42,22 @@ button {
     background: rgba(0, 0, 0, 0.88);
 }
 
+.AuthContainer.SignUpMode {
+    position: relative;
+    inset: auto;
+    min-height: 100vh;
+    align-items: flex-start;
+}
+
 .AuthModal {
     width: 100%;
     max-width: 420px;
     padding: 36px;
     background: #0b0b0b;
+}
+
+.AuthContainer.SignUpMode .AuthModal {
+    margin: 24px 0;
 }
 
 .AuthView {
@@ -170,13 +181,7 @@ button {
         padding: 28px 22px;
     }
 
-    .AuthContainer:has(#SignUpView:not([hidden])) {
-        position: absolute;
-        min-height: 100%;
-        align-items: flex-start;
-    }
-
-    .AuthContainer:has(#SignUpView:not([hidden])) .AuthModal {
+    .AuthContainer.SignUpMode .AuthModal {
         margin: 16px 0;
     }
 }

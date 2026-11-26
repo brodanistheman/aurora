@@ -44,6 +44,8 @@ function ShowView(View) {
     SignUpView.hidden = View !== "SignUp";
     AuthenticatedView.hidden = View !== "Authenticated";
 
+    AuthContainer.classList.toggle("SignUpMode", View === "SignUp");
+
     SignInMessage.textContent = "";
     SignUpMessage.textContent = "";
 }
