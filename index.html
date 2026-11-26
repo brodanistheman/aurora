@@ -156,12 +156,26 @@
                                 required
                             >
 
-                            <label for="ProfileAvatarUrl">Avatar URL</label>
-                            <input
-                                id="ProfileAvatarUrl"
-                                type="url"
-                                placeholder="https://example.com/avatar.png"
-                            >
+                            <label>Avatar</label>
+
+                            <div class="AvatarUpload">
+                                <img
+                                    id="ProfileAvatarPreview"
+                                    class="AvatarPreview"
+                                    alt="Avatar Preview"
+                                    hidden
+                                >
+
+                                <input
+                                    id="ProfileAvatarFile"
+                                    type="file"
+                                    accept="image/png,image/jpeg,image/webp,image/gif"
+                                >
+
+                                <p class="AvatarDescription">
+                                    PNG, JPG, WebP, Or GIF. Maximum Size: 5 MB.
+                                </p>
+                            </div>
 
                             <p id="ProfileMessage" class="Message" aria-live="polite"></p>
 

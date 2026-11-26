@@ -13,8 +13,7 @@ import {
     getDoc,
     runTransaction,
     serverTimestamp,
-    updateDoc,
-    deleteField
+    updateDoc
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 
 const AuthContainer = document.querySelector(".AuthContainer");
@@ -43,10 +42,26 @@ const ShowSignIn = document.getElementById("ShowSignIn");
 
 const ProfileUsername = document.getElementById("ProfileUsername");
 const ProfileDisplayName = document.getElementById("ProfileDisplayName");
-const ProfileAvatarUrl = document.getElementById("ProfileAvatarUrl");
+const ProfileAvatarFile = document.getElementById("ProfileAvatarFile");
+const ProfileAvatarPreview = document.getElementById("ProfileAvatarPreview");
+
+const ImageKitAuthEndpoint = "https://aurora-imagekit-auth.4dapple.workers.dev/auth";
+const ImageKitUploadEndpoint = "https://upload.imagekit.io/api/v1/files/upload";
+
+const MaximumAvatarSize = 5 * 1024 * 1024;
+
+const AllowedAvatarTypes = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/gif": "gif"
+};
 
 let SignUpInProgress = false;
 let CurrentUser = null;
+let CurrentAvatarUrl = null;
+let SelectedAvatarFile = null;
+let AvatarPreviewUrl = null;
 
 function ShowView(View) {
     SignInView.hidden = View !== "SignIn";
@@ -58,8 +73,10 @@ function ShowView(View) {
     SignInMessage.textContent = "";
     SignUpMessage.textContent = "";
     ProfileMessage.textContent = "";
+    ProfileMessage.style.color = "";
 
     window.scrollTo(0, 0);
+    AuthContainer.scrollTop = 0;
 }
 
 function SetButtonState(Button, Disabled, Text) {
@@ -100,10 +117,14 @@ function GetUsernameErrorMessage(Error) {
         return "Your Profile Could Not Be Found.";
     }
 
+    if (Error.message === "AvatarUploadFailed") {
+        return "Unable To Upload Your Avatar. Please Try Again.";
+    }
+
     return "Unable To Save Your Profile. Please Try Again.";
 }
 
-function ValidateProfile(Username, DisplayName, AvatarUrl) {
+function ValidateProfile(Username, DisplayName) {
     if (!/^[a-z0-9_]{3,20}$/.test(Username)) {
         return "Usernames Must Be 3 To 20 Characters And Contain Only Lowercase Letters, Numbers, And Underscores.";
     }
@@ -112,19 +133,87 @@ function ValidateProfile(Username, DisplayName, AvatarUrl) {
         return "Display Names Must Be Between 1 And 32 Characters.";
     }
 
-    if (AvatarUrl) {
-        try {
-            const Url = new URL(AvatarUrl);
+    return null;
+}
 
-            if (Url.protocol !== "https:") {
-                return "Avatar URLs Must Use HTTPS.";
-            }
-        } catch (Error) {
-            return "Please Enter A Valid Avatar URL.";
-        }
+function UpdateAvatarPreview(Url) {
+    if (AvatarPreviewUrl) {
+        URL.revokeObjectURL(AvatarPreviewUrl);
+        AvatarPreviewUrl = null;
     }
 
-    return null;
+    if (Url) {
+        ProfileAvatarPreview.src = Url;
+        ProfileAvatarPreview.hidden = false;
+    } else {
+        ProfileAvatarPreview.removeAttribute("src");
+        ProfileAvatarPreview.hidden = true;
+    }
+}
+
+function SetAvatarPreviewFromFile(File) {
+    if (AvatarPreviewUrl) {
+        URL.revokeObjectURL(AvatarPreviewUrl);
+    }
+
+    AvatarPreviewUrl = URL.createObjectURL(File);
+    ProfileAvatarPreview.src = AvatarPreviewUrl;
+    ProfileAvatarPreview.hidden = false;
+}
+
+async function UploadAvatar(File, User) {
+    const AuthResponse = await fetch(ImageKitAuthEndpoint, {
+        method: "GET",
+        cache: "no-store"
+    });
+
+    if (!AuthResponse.ok) {
+        throw new Error("AvatarUploadFailed");
+    }
+
+    const AuthData = await AuthResponse.json();
+
+    if (
+        !AuthData.token ||
+        !AuthData.expire ||
+        !AuthData.signature ||
+        !AuthData.publicKey
+    ) {
+        throw new Error("AvatarUploadFailed");
+    }
+
+    const Extension = AllowedAvatarTypes[File.type];
+
+    if (!Extension) {
+        throw new Error("AvatarUploadFailed");
+    }
+
+    const FormDataBody = new FormData();
+
+    FormDataBody.append("file", File);
+    FormDataBody.append(
+        "fileName",
+        `avatar_${User.uid}_${Date.now()}.${Extension}`
+    );
+    FormDataBody.append("publicKey", AuthData.publicKey);
+    FormDataBody.append("signature", AuthData.signature);
+    FormDataBody.append("expire", String(AuthData.expire));
+    FormDataBody.append("token", AuthData.token);
+    FormDataBody.append("folder", "/aurora/avatars");
+    FormDataBody.append("useUniqueFileName", "true");
+
+    const UploadResponse = await fetch(ImageKitUploadEndpoint, {
+        method: "POST",
+        body: FormDataBody
+    });
+
+    const UploadData = await UploadResponse.json();
+
+    if (!UploadResponse.ok || !UploadData.url) {
+        throw new Error("AvatarUploadFailed");
+    }
+
+    return UploadData.url;
 }
 
 async function MigrateUserProfile(User) {
@@ -170,8 +259,8 @@ async function MigrateUserProfile(User) {
                 Username: Username,
                 DisplayName: UserData.DisplayName,
                 AvatarUrl: UserData.AvatarUrl ?? null,
-                CreatedAt: UserData.CreatedAt || serverTimestamp(),
-                UpdatedAt: UserData.UpdatedAt || serverTimestamp()
+                CreatedAt: serverTimestamp(),
+                UpdatedAt: serverTimestamp()
             });
         }
 
@@ -181,28 +270,6 @@ async function MigrateUserProfile(User) {
                 Username: Username,
                 CreatedAt: serverTimestamp()
             });
-        }
-
-        const UserUpdates = {};
-
-        if ("Username" in UserData) {
-            UserUpdates.Username = deleteField();
-        }
-
-        if ("DisplayName" in UserData) {
-            UserUpdates.DisplayName = deleteField();
-        }
-
-        if ("AvatarUrl" in UserData) {
-            UserUpdates.AvatarUrl = deleteField();
-        }
-
-        if ("UpdatedAt" in UserData) {
-            UserUpdates.UpdatedAt = deleteField();
-        }
-
-        if (Object.keys(UserUpdates).length > 0) {
-            Transaction.update(UserRef, UserUpdates);
         }
     });
 }
@@ -233,7 +300,12 @@ async function LoadAuthenticatedUser(User) {
 
         ProfileUsername.value = ProfileData.Username || "";
         ProfileDisplayName.value = ProfileData.DisplayName || "";
-        ProfileAvatarUrl.value = ProfileData.AvatarUrl || "";
+
+        CurrentAvatarUrl = ProfileData.AvatarUrl || null;
+        SelectedAvatarFile = null;
+        ProfileAvatarFile.value = "";
+
+        UpdateAvatarPreview(CurrentAvatarUrl);
 
         AuthenticatedMessage.textContent = `Signed In As ${ProfileData.DisplayName}`;
 
@@ -252,6 +324,38 @@ ShowSignUp.addEventListener("click", () => {
 
 ShowSignIn.addEventListener("click", () => {
     ShowView("SignIn");
+});
+
+ProfileAvatarFile.addEventListener("change", () => {
+    const File = ProfileAvatarFile.files[0];
+
+    ProfileMessage.textContent = "";
+    ProfileMessage.style.color = "";
+
+    if (!File) {
+        SelectedAvatarFile = null;
+        UpdateAvatarPreview(CurrentAvatarUrl);
+        return;
+    }
+
+    if (!AllowedAvatarTypes[File.type]) {
+        ProfileMessage.textContent = "Please Select A PNG, JPG, WebP, Or GIF Image.";
+        ProfileAvatarFile.value = "";
+        SelectedAvatarFile = null;
+        UpdateAvatarPreview(CurrentAvatarUrl);
+        return;
+    }
+
+    if (File.size > MaximumAvatarSize) {
+        ProfileMessage.textContent = "Your Avatar Must Be Smaller Than 5 MB.";
+        ProfileAvatarFile.value = "";
+        SelectedAvatarFile = null;
+        UpdateAvatarPreview(CurrentAvatarUrl);
+        return;
+    }
+
+    SelectedAvatarFile = File;
+    SetAvatarPreviewFromFile(File);
 });
 
 SignUpForm.addEventListener("submit", async (Event) => {
@@ -393,14 +497,13 @@ ProfileForm.addEventListener("submit", async (Event) => {
 
     const Username = ProfileUsername.value.trim().toLowerCase();
     const DisplayName = ProfileDisplayName.value.trim();
-    const AvatarUrl = ProfileAvatarUrl.value.trim();
 
     ProfileMessage.textContent = "";
+    ProfileMessage.style.color = "";
 
     const ValidationMessage = ValidateProfile(
         Username,
-        DisplayName,
-        AvatarUrl
+        DisplayName
     );
 
     if (ValidationMessage) {
@@ -412,6 +515,15 @@ ProfileForm.addEventListener("submit", async (Event) => {
 
     try {
         const User = CurrentUser;
+        let AvatarUrl = CurrentAvatarUrl;
+
+        if (SelectedAvatarFile) {
+            SetButtonState(SaveProfileButton, true, "Uploading Avatar...");
+            AvatarUrl = await UploadAvatar(SelectedAvatarFile, User);
+        }
+
+        SetButtonState(SaveProfileButton, true, "Saving Changes...");
+
         const ProfileRef = doc(Db, "Profiles", User.uid);
 
         await runTransaction(Db, async (Transaction) => {
@@ -462,10 +574,16 @@ ProfileForm.addEventListener("submit", async (Event) => {
             Transaction.update(ProfileRef, {
                 Username: Username,
                 DisplayName: DisplayName,
-                AvatarUrl: AvatarUrl || null,
+                AvatarUrl: AvatarUrl,
                 UpdatedAt: serverTimestamp()
             });
         });
+
+        CurrentAvatarUrl = AvatarUrl;
+        SelectedAvatarFile = null;
+        ProfileAvatarFile.value = "";
+
+        UpdateAvatarPreview(CurrentAvatarUrl);
 
         AuthenticatedMessage.textContent = `Signed In As ${DisplayName}`;
         ProfileMessage.style.color = "#8fbd99";
@@ -500,6 +618,11 @@ onAuthStateChanged(Auth, async (User) => {
         await LoadAuthenticatedUser(User);
     } else {
         CurrentUser = null;
+        CurrentAvatarUrl = null;
+        SelectedAvatarFile = null;
+
+        UpdateAvatarPreview(null);
+
         ShowView("SignIn");
         AuthContainer.hidden = false;
     }

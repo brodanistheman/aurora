@@ -10,36 +10,26 @@ body {
 }
 
 html {
-    overflow-y: scroll;
-    scrollbar-width: auto;
-    scrollbar-color: #555 #000;
+    overflow-y: auto;
+    scrollbar-width: none;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
 }
 
 body {
     overflow-x: hidden;
-    overflow-y: visible;
+    overflow-y: auto;
     background: #000;
     color: #ededed;
     font-family: "Inter", sans-serif;
     font-size: 14px;
     font-weight: 400;
     -webkit-font-smoothing: antialiased;
-}
-
-body::-webkit-scrollbar {
-    width: 12px;
-}
-
-body::-webkit-scrollbar-track {
-    background: #000;
-}
-
-body::-webkit-scrollbar-thumb {
-    background: #555;
-}
-
-body::-webkit-scrollbar-thumb:hover {
-    background: #777;
 }
 
 button,
@@ -62,32 +52,34 @@ button {
     display: flex;
     align-items: center;
     justify-content: center;
+    overflow-x: hidden;
+    overflow-y: auto;
     padding: 24px;
     background: rgba(0, 0, 0, 0.88);
+    scrollbar-width: none;
+}
+
+.AuthContainer::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
 }
 
 .AuthContainer.SignUpMode {
-    position: relative;
-    inset: auto;
-    display: flex;
-    width: 100%;
-    height: auto;
-    min-height: 100vh;
     align-items: flex-start;
-    justify-content: center;
-    overflow: visible;
 }
 
 .AuthModal {
     width: 100%;
     max-width: 420px;
+    margin: auto;
     padding: 36px;
     background: #0b0b0b;
+    flex-shrink: 0;
 }
 
 .AuthContainer.SignUpMode .AuthModal {
-    flex-shrink: 0;
-    margin: 24px 0;
+    margin: 24px auto;
 }
 
 .AuthView {
@@ -143,6 +135,28 @@ button {
 
 .AuthForm input:focus {
     border-color: #777;
+}
+
+.AuthForm input[type="file"] {
+    height: auto;
+    min-height: 46px;
+    padding: 11px;
+    color: #858585;
+    font-size: 12px;
+}
+
+.AuthForm input[type="file"]::file-selector-button {
+    height: 28px;
+    margin-right: 12px;
+    padding: 0 12px;
+    border: none;
+    border-radius: 0;
+    background: #ededed;
+    color: #000;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
 }
 
 .AuthForm button,
@@ -219,6 +233,28 @@ button {
     line-height: 1.6;
 }
 
+.AvatarUpload {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.AvatarPreview {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: #141414;
+}
+
+.AvatarDescription {
+    margin: 0;
+    color: #707070;
+    font-size: 11px;
+    line-height: 1.5;
+}
+
 #SignOutButton {
     margin-top: 30px;
 }
@@ -229,16 +265,14 @@ button {
 
 @media (max-width: 600px) {
     .AuthContainer {
-        align-items: flex-start;
         padding: 16px;
     }
 
     .AuthModal {
-        margin: auto 0;
         padding: 28px 22px;
     }
 
     .AuthContainer.SignUpMode .AuthModal {
-        margin: 16px 0;
+        margin: 16px auto;
     }
 }
