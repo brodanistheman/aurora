@@ -443,7 +443,7 @@ async function LoadAuthenticatedUser(User) {
 
         UpdateAvatarPreview(CurrentAvatarUrl);
 
-        AuthenticatedMessage.textContent = `Signed In As ${ProfileData.DisplayName}`;
+        AuthenticatedMessage.textContent = `Signed In As ${ProfileData.Username}`;
 
         ShowView("Authenticated");
         AuthContainer.hidden = false;
@@ -670,8 +670,6 @@ SignInForm.addEventListener("submit", async (Event) => {
 
     try {
         await signInWithEmailAndPassword(Auth, Email, Password);
-
-        SignInForm.reset();
     } catch (Error) {
         if (
             Error.code === "auth/user-not-found" ||
@@ -786,7 +784,7 @@ ProfileForm.addEventListener("submit", async (Event) => {
 
         UpdateAvatarPreview(CurrentAvatarUrl);
 
-        AuthenticatedMessage.textContent = `Signed In As ${DisplayName}`;
+        AuthenticatedMessage.textContent = `Signed In As ${Username}`;
         ProfileMessage.style.color = "#8fbd99";
         ProfileMessage.textContent = "Your Profile Has Been Updated.";
     } catch (Error) {
