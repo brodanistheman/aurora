@@ -1,4 +1,3 @@
-
 * {
     box-sizing: border-box;
 }
@@ -30,30 +29,26 @@ button {
 
 .Page {
     min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-}
-
-.Header {
-    width: 100%;
-    height: 76px;
-    display: flex;
-    align-items: center;
-    padding: 0 48px;
-}
-
-.Logo {
-    color: #ededed;
-    font-size: 21px;
-    font-weight: 500;
-    text-decoration: none;
 }
 
 .AuthContainer {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(0, 0, 0, 0.88);
+}
+
+.AuthModal {
     width: 100%;
-    max-width: 400px;
-    margin: auto;
-    padding: 40px 24px 80px;
+    max-width: 420px;
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+    padding: 36px;
+    background: #0b0b0b;
 }
 
 .AuthView {
@@ -61,12 +56,12 @@ button {
 }
 
 .AuthHeading {
-    margin-bottom: 32px;
+    margin-bottom: 30px;
 }
 
 .AuthHeading h1 {
     margin: 0 0 10px;
-    font-size: 26px;
+    font-size: 25px;
     font-weight: 500;
     letter-spacing: -0.8px;
 }
@@ -167,12 +162,12 @@ button {
 }
 
 @media (max-width: 600px) {
-    .Header {
-        height: 66px;
-        padding: 0 22px;
+    .AuthContainer {
+        padding: 16px;
     }
 
-    .AuthContainer {
-        padding: 35px 22px 60px;
+    .AuthModal {
+        max-height: calc(100vh - 32px);
+        padding: 28px 22px;
     }
 }

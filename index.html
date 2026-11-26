@@ -15,130 +15,128 @@
 </head>
 <body>
     <main class="Page">
-        <header class="Header">
-            <a class="Logo" href="https://brodanistheman.github.io/aurora/" aria-label="Aurora Home">Aurora</a>
-        </header>
-
         <section class="AuthContainer" hidden>
+            <div class="AuthModal">
 
-            <div id="SignInView" class="AuthView">
-                <div class="AuthHeading">
-                    <h1>Sign In</h1>
-                    <p>Welcome Back To Aurora.</p>
+                <div id="SignInView" class="AuthView">
+                    <div class="AuthHeading">
+                        <h1>Sign In</h1>
+                        <p>Welcome Back To Aurora.</p>
+                    </div>
+
+                    <form id="SignInForm" class="AuthForm">
+                        <label for="SignInEmail">Email Address</label>
+                        <input
+                            id="SignInEmail"
+                            type="email"
+                            placeholder="Enter Your Email"
+                            autocomplete="email"
+                            required
+                        >
+
+                        <label for="SignInPassword">Password</label>
+                        <input
+                            id="SignInPassword"
+                            type="password"
+                            placeholder="Enter Your Password"
+                            autocomplete="current-password"
+                            required
+                        >
+
+                        <p id="SignInMessage" class="Message" aria-live="polite"></p>
+
+                        <button id="SignInButton" type="submit">
+                            Sign In
+                        </button>
+                    </form>
+
+                    <p class="AuthSwitch">
+                        Don't Have An Account?
+                        <button type="button" id="ShowSignUp">Sign Up</button>
+                    </p>
                 </div>
 
-                <form id="SignInForm" class="AuthForm">
-                    <label for="SignInEmail">Email Address</label>
-                    <input
-                        id="SignInEmail"
-                        type="email"
-                        placeholder="Enter Your Email"
-                        autocomplete="email"
-                        required
-                    >
+                <div id="SignUpView" class="AuthView" hidden>
+                    <div class="AuthHeading">
+                        <h1>Create An Account</h1>
+                        <p>Join Aurora.</p>
+                    </div>
 
-                    <label for="SignInPassword">Password</label>
-                    <input
-                        id="SignInPassword"
-                        type="password"
-                        placeholder="Enter Your Password"
-                        autocomplete="current-password"
-                        required
-                    >
+                    <form id="SignUpForm" class="AuthForm">
+                        <label for="SignUpUsername">Username</label>
+                        <input
+                            id="SignUpUsername"
+                            type="text"
+                            placeholder="Enter A Username"
+                            minlength="3"
+                            maxlength="20"
+                            autocomplete="username"
+                            required
+                        >
 
-                    <p id="SignInMessage" class="Message" aria-live="polite"></p>
+                        <label for="SignUpDisplayName">Display Name</label>
+                        <input
+                            id="SignUpDisplayName"
+                            type="text"
+                            placeholder="Enter A Display Name"
+                            maxlength="32"
+                            required
+                        >
 
-                    <button id="SignInButton" type="submit">
-                        Sign In
+                        <label for="SignUpEmail">Email Address</label>
+                        <input
+                            id="SignUpEmail"
+                            type="email"
+                            placeholder="Enter Your Email"
+                            autocomplete="email"
+                            required
+                        >
+
+                        <label for="SignUpPassword">Password</label>
+                        <input
+                            id="SignUpPassword"
+                            type="password"
+                            placeholder="Create A Password"
+                            minlength="8"
+                            autocomplete="new-password"
+                            required
+                        >
+
+                        <label for="ConfirmPassword">Confirm Password</label>
+                        <input
+                            id="ConfirmPassword"
+                            type="password"
+                            placeholder="Confirm Your Password"
+                            minlength="8"
+                            autocomplete="new-password"
+                            required
+                        >
+
+                        <p id="SignUpMessage" class="Message" aria-live="polite"></p>
+
+                        <button id="SignUpButton" type="submit">
+                            Create Account
+                        </button>
+                    </form>
+
+                    <p class="AuthSwitch">
+                        Already Have An Account?
+                        <button type="button" id="ShowSignIn">Sign In</button>
+                    </p>
+                </div>
+
+                <div id="AuthenticatedView" class="AuthView" hidden>
+                    <div class="AuthHeading">
+                        <h1>Welcome To Aurora</h1>
+                        <p id="AuthenticatedMessage"></p>
+                    </div>
+
+                    <button id="SignOutButton" type="button">
+                        Sign Out
                     </button>
-                </form>
-
-                <p class="AuthSwitch">
-                    Don't Have An Account?
-                    <button type="button" id="ShowSignUp">Sign Up</button>
-                </p>
-            </div>
-
-            <div id="SignUpView" class="AuthView" hidden>
-                <div class="AuthHeading">
-                    <h1>Create An Account</h1>
-                    <p>Join Aurora.</p>
                 </div>
 
-                <form id="SignUpForm" class="AuthForm">
-                    <label for="SignUpUsername">Username</label>
-                    <input
-                        id="SignUpUsername"
-                        type="text"
-                        placeholder="Enter A Username"
-                        minlength="3"
-                        maxlength="20"
-                        autocomplete="username"
-                        required
-                    >
-
-                    <label for="SignUpDisplayName">Display Name</label>
-                    <input
-                        id="SignUpDisplayName"
-                        type="text"
-                        placeholder="Enter A Display Name"
-                        maxlength="32"
-                        required
-                    >
-
-                    <label for="SignUpEmail">Email Address</label>
-                    <input
-                        id="SignUpEmail"
-                        type="email"
-                        placeholder="Enter Your Email"
-                        autocomplete="email"
-                        required
-                    >
-
-                    <label for="SignUpPassword">Password</label>
-                    <input
-                        id="SignUpPassword"
-                        type="password"
-                        placeholder="Create A Password"
-                        minlength="8"
-                        autocomplete="new-password"
-                        required
-                    >
-
-                    <label for="ConfirmPassword">Confirm Password</label>
-                    <input
-                        id="ConfirmPassword"
-                        type="password"
-                        placeholder="Confirm Your Password"
-                        minlength="8"
-                        autocomplete="new-password"
-                        required
-                    >
-
-                    <p id="SignUpMessage" class="Message" aria-live="polite"></p>
-
-                    <button id="SignUpButton" type="submit">
-                        Create Account
-                    </button>
-                </form>
-
-                <p class="AuthSwitch">
-                    Already Have An Account?
-                    <button type="button" id="ShowSignIn">Sign In</button>
-                </p>
             </div>
-
-            <div id="AuthenticatedView" class="AuthView" hidden>
-                <div class="AuthHeading">
-                    <h1>Welcome To Aurora</h1>
-                    <p id="AuthenticatedMessage"></p>
-                </div>
-
-                <button id="SignOutButton" type="button">
-                    Sign Out
-                </button>
-            </div>
-
         </section>
     </main>
 </body>
