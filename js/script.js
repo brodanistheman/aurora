@@ -17,6 +17,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 
 const AuthContainer = document.querySelector(".AuthContainer");
+const Logo = document.querySelector(".Logo");
 
 const SignInView = document.getElementById("SignInView");
 const SignUpView = document.getElementById("SignUpView");
@@ -38,6 +39,19 @@ const ShowSignUp = document.getElementById("ShowSignUp");
 const ShowSignIn = document.getElementById("ShowSignIn");
 
 let SignUpInProgress = false;
+
+Logo.addEventListener("click", (Event) => {
+    const CurrentUrl = new URL(window.location.href);
+    const HomeUrl = new URL("https://brodanistheman.github.io/aurora/");
+
+    if (
+        CurrentUrl.origin === HomeUrl.origin &&
+        CurrentUrl.pathname === HomeUrl.pathname
+    ) {
+        Event.preventDefault();
+        window.history.replaceState(null, "", HomeUrl.pathname);
+    }
+});
 
 function ShowView(View) {
     SignInView.hidden = View !== "SignIn";
