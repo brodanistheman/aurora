@@ -131,6 +131,46 @@
                         <p id="AuthenticatedMessage"></p>
                     </div>
 
+                    <div class="ProfileSection">
+                        <div class="ProfileHeading">
+                            <h2>Profile Settings</h2>
+                            <p>Customize Your Aurora Profile.</p>
+                        </div>
+
+                        <form id="ProfileForm" class="AuthForm">
+                            <label for="ProfileUsername">Username</label>
+                            <input
+                                id="ProfileUsername"
+                                type="text"
+                                minlength="3"
+                                maxlength="20"
+                                autocomplete="username"
+                                required
+                            >
+
+                            <label for="ProfileDisplayName">Display Name</label>
+                            <input
+                                id="ProfileDisplayName"
+                                type="text"
+                                maxlength="32"
+                                required
+                            >
+
+                            <label for="ProfileAvatarUrl">Avatar URL</label>
+                            <input
+                                id="ProfileAvatarUrl"
+                                type="url"
+                                placeholder="https://example.com/avatar.png"
+                            >
+
+                            <p id="ProfileMessage" class="Message" aria-live="polite"></p>
+
+                            <button id="SaveProfileButton" type="submit">
+                                Save Changes
+                            </button>
+                        </form>
+                    </div>
+
                     <button id="SignOutButton" type="button">
                         Sign Out
                     </button>

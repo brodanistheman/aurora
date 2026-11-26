@@ -1,6 +1,10 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
 import { getAuth } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
-import { getFirestore } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+import {
+    initializeFirestore,
+    persistentLocalCache,
+    getFirestore
+} from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 
 const FirebaseConfig = {
     apiKey: "AIzaSyArnOQVJSyA_AgWcMpSr8rmxxmt3yK4RfA",
@@ -14,6 +18,15 @@ const FirebaseConfig = {
 const FirebaseApp = initializeApp(FirebaseConfig);
 
 const Auth = getAuth(FirebaseApp);
-const Db = getFirestore(FirebaseApp);
+
+let Db;
+
+try {
+    Db = initializeFirestore(FirebaseApp, {
+        localCache: persistentLocalCache()
+    });
+} catch (Error) {
+    Db = getFirestore(FirebaseApp);
+}
 
 export { Auth, Db };

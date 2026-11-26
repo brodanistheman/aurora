@@ -196,6 +196,33 @@ button {
     line-height: 1.5;
 }
 
+.ProfileSection {
+    margin-top: 30px;
+    padding-top: 25px;
+    border-top: 1px solid #242424;
+}
+
+.ProfileHeading {
+    margin-bottom: 20px;
+}
+
+.ProfileHeading h2 {
+    margin: 0 0 8px;
+    font-size: 17px;
+    font-weight: 500;
+}
+
+.ProfileHeading p {
+    margin: 0;
+    color: #858585;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+#SignOutButton {
+    margin-top: 30px;
+}
+
 [hidden] {
     display: none !important;
 }
