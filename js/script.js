@@ -1,57 +1,241 @@
-const SignInTab = document.getElementById("SignInTab");
-const SignUpTab = document.getElementById("SignUpTab");
+
+import { Auth, Db } from "./firebase.js";
+
+import {
+    createUserWithEmailAndPassword,
+    signInWithEmailAndPassword,
+    signOut,
+    onAuthStateChanged,
+    deleteUser
+} from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
+
+import {
+    doc,
+    getDoc,
+    runTransaction,
+    serverTimestamp,
+    updateDoc
+} from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+
+const SignInView = document.getElementById("SignInView");
+const SignUpView = document.getElementById("SignUpView");
+const AuthenticatedView = document.getElementById("AuthenticatedView");
 
 const SignInForm = document.getElementById("SignInForm");
 const SignUpForm = document.getElementById("SignUpForm");
 
-const AuthTitle = document.getElementById("AuthTitle");
-const AuthDescription = document.getElementById("AuthDescription");
-const AuthFooterText = document.getElementById("AuthFooterText");
-const FooterToggle = document.getElementById("FooterToggle");
+const SignInMessage = document.getElementById("SignInMessage");
+const SignUpMessage = document.getElementById("SignUpMessage");
 
-function ShowSignIn() {
-    SignInTab.classList.add("Active");
-    SignUpTab.classList.remove("Active");
+const SignInButton = document.getElementById("SignInButton");
+const SignUpButton = document.getElementById("SignUpButton");
+const SignOutButton = document.getElementById("SignOutButton");
 
-    SignInForm.classList.remove("Hidden");
-    SignUpForm.classList.add("Hidden");
+const AuthenticatedMessage = document.getElementById("AuthenticatedMessage");
 
-    AuthTitle.textContent = "Sign In";
-    AuthDescription.textContent = "Welcome Back";
+const ShowSignUp = document.getElementById("ShowSignUp");
+const ShowSignIn = document.getElementById("ShowSignIn");
 
-    AuthFooterText.textContent = "Don't Have An Account?";
-    FooterToggle.textContent = "Sign Up";
+let SignupInProgress = false;
+
+function ShowView(View) {
+    SignInView.hidden = View !== "SignIn";
+    SignUpView.hidden = View !== "SignUp";
+    AuthenticatedView.hidden = View !== "Authenticated";
+
+    SignInMessage.textContent = "";
+    SignUpMessage.textContent = "";
 }
 
-function ShowSignUp() {
-    SignUpTab.classList.add("Active");
-    SignInTab.classList.remove("Active");
-
-    SignUpForm.classList.remove("Hidden");
-    SignInForm.classList.add("Hidden");
-
-    AuthTitle.textContent = "Sign Up";
-    AuthDescription.textContent = "Create Your Account";
-
-    AuthFooterText.textContent = "Already Have An Account?";
-    FooterToggle.textContent = "Sign In";
+function SetButtonState(Button, Disabled, Text) {
+    Button.disabled = Disabled;
+    Button.textContent = Text;
 }
 
-SignInTab.addEventListener("click", ShowSignIn);
-SignUpTab.addEventListener("click", ShowSignUp);
+function GetAuthMessage(Code) {
+    const Messages = {
+        "auth/email-already-in-use": "This Email Address Is Already Registered.",
+        "auth/invalid-email": "Please Enter A Valid Email Address.",
+        "auth/invalid-credential": "The Email Or Password Is Incorrect.",
+        "auth/user-not-found": "No Account Was Found With This Email.",
+        "auth/wrong-password": "The Password Is Incorrect.",
+        "auth/weak-password": "Your Password Is Too Weak.",
+        "auth/too-many-requests": "Too Many Attempts. Please Try Again Later.",
+        "auth/network-request-failed": "Please Check Your Internet Connection.",
+        "auth/operation-not-allowed": "Email And Password Sign In Is Not Enabled."
+    };
 
-FooterToggle.addEventListener("click", () => {
-    if (SignInForm.classList.contains("Hidden")) {
-        ShowSignIn();
-    } else {
-        ShowSignUp();
+    return Messages[Code] || "Something Went Wrong. Please Try Again.";
+}
+
+async function LoadAuthenticatedUser(User) {
+    try {
+        const UserRef = doc(Db, "Users", User.uid);
+        const UserSnapshot = await getDoc(UserRef);
+
+        if (!UserSnapshot.exists()) {
+            await signOut(Auth);
+            return;
+        }
+
+        const UserData = UserSnapshot.data();
+
+        AuthenticatedMessage.textContent = `Signed In As ${UserData.DisplayName}`;
+        ShowView("Authenticated");
+    } catch (Error) {
+        AuthenticatedMessage.textContent = "Unable To Load Your Account.";
+        ShowView("Authenticated");
+    }
+}
+
+ShowSignUp.addEventListener("click", () => {
+    ShowView("SignUp");
+});
+
+ShowSignIn.addEventListener("click", () => {
+    ShowView("SignIn");
+});
+
+SignUpForm.addEventListener("submit", async (Event) => {
+    Event.preventDefault();
+
+    const Username = document.getElementById("SignUpUsername").value.trim().toLowerCase();
+    const DisplayName = document.getElementById("SignUpDisplayName").value.trim();
+    const Email = document.getElementById("SignUpEmail").value.trim();
+    const Password = document.getElementById("SignUpPassword").value;
+    const ConfirmPassword = document.getElementById("ConfirmPassword").value;
+
+    SignUpMessage.textContent = "";
+
+    if (!/^[a-z0-9_]{3,20}$/.test(Username)) {
+        SignUpMessage.textContent = "Usernames Must Be 3 To 20 Characters And Contain Only Lowercase Letters, Numbers, And Underscores.";
+        return;
+    }
+
+    if (DisplayName.length === 0 || DisplayName.length > 32) {
+        SignUpMessage.textContent = "Please Enter A Display Name Between 1 And 32 Characters.";
+        return;
+    }
+
+    if (Password.length < 8) {
+        SignUpMessage.textContent = "Your Password Must Contain At Least 8 Characters.";
+        return;
+    }
+
+    if (Password !== ConfirmPassword) {
+        SignUpMessage.textContent = "Your Passwords Do Not Match.";
+        return;
+    }
+
+    SignupInProgress = true;
+    SetButtonState(SignUpButton, true, "Creating Account...");
+
+    let UserCredential = null;
+
+    try {
+        UserCredential = await createUserWithEmailAndPassword(Auth, Email, Password);
+
+        const User = UserCredential.user;
+        const UsernameRef = doc(Db, "Usernames", Username);
+        const UserRef = doc(Db, "Users", User.uid);
+
+        await runTransaction(Db, async (Transaction) => {
+            const UsernameSnapshot = await Transaction.get(UsernameRef);
+
+            if (UsernameSnapshot.exists()) {
+                throw new Error("UsernameTaken");
+            }
+
+            Transaction.set(UsernameRef, {
+                Uid: User.uid,
+                Username: Username,
+                CreatedAt: serverTimestamp()
+            });
+
+            Transaction.set(UserRef, {
+                Username: Username,
+                DisplayName: DisplayName,
+                Email: User.email,
+                AvatarUrl: null,
+                CreatedAt: serverTimestamp(),
+                LastActive: serverTimestamp()
+            });
+        });
+
+        SignUpForm.reset();
+
+        SignupInProgress = false;
+        await LoadAuthenticatedUser(User);
+    } catch (Error) {
+        if (UserCredential) {
+            try {
+                await deleteUser(UserCredential.user);
+            } catch (DeleteError) {
+                SignUpMessage.textContent = "Account Cleanup Could Not Be Completed. Please Contact Support.";
+                return;
+            }
+        }
+
+        if (Error.message === "UsernameTaken") {
+            SignUpMessage.textContent = "That Username Is Already Taken.";
+        } else {
+            SignUpMessage.textContent = GetAuthMessage(Error.code);
+        }
+    } finally {
+        SignupInProgress = false;
+        SetButtonState(SignUpButton, false, "Create Account");
     }
 });
 
-SignInForm.addEventListener("submit", (Event) => {
+SignInForm.addEventListener("submit", async (Event) => {
     Event.preventDefault();
+
+    const Email = document.getElementById("SignInEmail").value.trim();
+    const Password = document.getElementById("SignInPassword").value;
+
+    SignInMessage.textContent = "";
+
+    SetButtonState(SignInButton, true, "Signing In...");
+
+    try {
+        const UserCredential = await signInWithEmailAndPassword(Auth, Email, Password);
+
+        await updateDoc(doc(Db, "Users", UserCredential.user.uid), {
+            LastActive: serverTimestamp()
+        });
+
+        SignInForm.reset();
+    } catch (Error) {
+        if (Error.code === "auth/user-not-found" || Error.code === "auth/wrong-password") {
+            SignInMessage.textContent = "The Email Or Password Is Incorrect.";
+        } else {
+            SignInMessage.textContent = GetAuthMessage(Error.code);
+        }
+    } finally {
+        SetButtonState(SignInButton, false, "Sign In");
+    }
 });
 
-SignUpForm.addEventListener("submit", (Event) => {
-    Event.preventDefault();
+SignOutButton.addEventListener("click", async () => {
+    SetButtonState(SignOutButton, true, "Signing Out...");
+
+    try {
+        await signOut(Auth);
+    } catch (Error) {
+        AuthenticatedMessage.textContent = "Unable To Sign Out. Please Try Again.";
+    } finally {
+        SetButtonState(SignOutButton, false, "Sign Out");
+    }
+});
+
+onAuthStateChanged(Auth, async (User) => {
+    if (SignupInProgress) {
+        return;
+    }
+
+    if (User) {
+        await LoadAuthenticatedUser(User);
+    } else {
+        ShowView("SignIn");
+    }
 });

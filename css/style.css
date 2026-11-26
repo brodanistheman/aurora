@@ -1,20 +1,21 @@
+
 * {
     box-sizing: border-box;
-    margin: 0;
-    padding: 0;
 }
 
 html,
 body {
     width: 100%;
     min-height: 100%;
+    margin: 0;
 }
 
 body {
-    background: #000000;
-    color: #ffffff;
+    background: #000;
+    color: #ededed;
     font-family: "Inter", sans-serif;
     font-size: 14px;
+    font-weight: 400;
     -webkit-font-smoothing: antialiased;
 }
 
@@ -28,149 +29,150 @@ button {
 }
 
 .Page {
-    width: 100%;
     min-height: 100vh;
     display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
+    flex-direction: column;
 }
 
-.Modal {
+.Header {
     width: 100%;
-    max-width: 380px;
-    background: #000000;
-    border: 1px solid #252525;
-    padding: 32px;
+    height: 76px;
+    display: flex;
+    align-items: center;
+    padding: 0 48px;
 }
 
-.ModalHeader {
+.Logo {
+    color: #ededed;
+    font-size: 21px;
+    font-weight: 500;
+    text-decoration: none;
+}
+
+.AuthContainer {
+    width: 100%;
+    max-width: 400px;
+    margin: auto;
+    padding: 40px 24px 80px;
+}
+
+.AuthView {
+    width: 100%;
+}
+
+.AuthHeading {
     margin-bottom: 32px;
 }
 
-.ModalHeader h1 {
-    font-size: 20px;
+.AuthHeading h1 {
+    margin: 0 0 10px;
+    font-size: 26px;
     font-weight: 500;
-    letter-spacing: -0.4px;
-    margin-bottom: 8px;
+    letter-spacing: -0.8px;
 }
 
-.ModalHeader p {
-    color: #777777;
-    font-size: 13px;
-    font-weight: 400;
+.AuthHeading p {
+    margin: 0;
+    color: #858585;
+    font-size: 14px;
+    line-height: 1.6;
 }
 
 .AuthForm {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 11px;
 }
 
-.Field {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.Field label {
-    color: #aaaaaa;
-    font-size: 12px;
-    font-weight: 400;
-}
-
-.Field input {
-    width: 100%;
-    height: 42px;
-    padding: 0 12px;
-    background: #080808;
-    border: 1px solid #292929;
-    border-radius: 0;
-    outline: none;
-    color: #ffffff;
-    font-size: 13px;
-    transition: border-color 0.15s;
-}
-
-.Field input::placeholder {
-    color: #555555;
-}
-
-.Field input:focus {
-    border-color: #666666;
-}
-
-.SubmitButton {
-    width: 100%;
-    height: 42px;
-    background: #ffffff;
-    border: 1px solid #ffffff;
-    border-radius: 0;
-    color: #000000;
+.AuthForm label {
+    margin-top: 9px;
+    color: #c8c8c8;
     font-size: 13px;
     font-weight: 500;
-    margin-top: 4px;
-    transition: opacity 0.15s;
 }
 
-.SubmitButton:hover {
-    opacity: 0.85;
+.AuthForm input {
+    width: 100%;
+    height: 46px;
+    padding: 0 13px;
+    border: 1px solid #242424;
+    border-radius: 5px;
+    outline: none;
+    background: #090909;
+    color: #ededed;
+    transition: border-color 150ms ease;
 }
 
-.SubmitButton:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+.AuthForm input::placeholder {
+    color: #606060;
 }
 
-.ModalFooter {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 5px;
-    margin-top: 24px;
-    font-size: 12px;
+.AuthForm input:focus {
+    border-color: #777;
 }
 
-.ModalFooter span {
-    color: #777777;
-}
-
-.ModalFooter button {
-    background: none;
+.AuthForm button,
+#SignOutButton {
+    width: 100%;
+    height: 46px;
+    margin-top: 15px;
     border: none;
-    color: #ffffff;
-    font-size: 12px;
-    font-weight: 400;
+    border-radius: 5px;
+    background: #ededed;
+    color: #000;
+    font-weight: 600;
+    transition: background 150ms ease;
 }
 
-.ModalFooter button:hover {
-    color: #aaaaaa;
+.AuthForm button:hover,
+#SignOutButton:hover {
+    background: #d2d2d2;
 }
 
-.AuthMessage {
-    margin-top: 16px;
+.AuthForm button:disabled,
+#SignOutButton:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+.AuthSwitch {
+    margin-top: 25px;
+    color: #858585;
+    text-align: center;
+    font-size: 13px;
+}
+
+.AuthSwitch button {
+    padding: 0;
+    border: none;
+    background: none;
+    color: #ededed;
+    font-weight: 500;
+}
+
+.AuthSwitch button:hover {
+    text-decoration: underline;
+}
+
+.Message {
+    min-height: 18px;
+    margin: 4px 0 0;
+    color: #e18a8a;
     font-size: 12px;
     line-height: 1.5;
 }
 
-.AuthMessage.Success {
-    color: #ffffff;
+[hidden] {
+    display: none !important;
 }
 
-.AuthMessage.Error {
-    color: #ff5555;
-}
-
-.Hidden {
-    display: none;
-}
-
-@media (max-width: 480px) {
-    .Page {
-        padding: 20px;
+@media (max-width: 600px) {
+    .Header {
+        height: 66px;
+        padding: 0 22px;
     }
 
-    .Modal {
-        padding: 24px;
+    .AuthContainer {
+        padding: 35px 22px 60px;
     }
 }
