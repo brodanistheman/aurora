@@ -224,14 +224,15 @@ function OpenAvatarCrop(File) {
 
     AvatarCropObjectUrl = URL.createObjectURL(File);
 
-    const Image = new Image();
+    const AvatarImage = new window.Image();
 
-    Image.onload = () => {
-        AvatarCropImage = Image;
+    AvatarImage.onload = () => {
+        AvatarCropImage = AvatarImage;
+        AvatarCropModal.hidden = false;
 
         AvatarCropBaseScale = Math.max(
-            AvatarCropViewport.clientWidth / Image.naturalWidth,
-            AvatarCropViewport.clientHeight / Image.naturalHeight
+            AvatarCropViewport.clientWidth / AvatarImage.naturalWidth,
+            AvatarCropViewport.clientHeight / AvatarImage.naturalHeight
         );
 
         AvatarCropScale = 1;
@@ -239,17 +240,16 @@ function OpenAvatarCrop(File) {
         AvatarCropOffsetY = 0;
         AvatarCropZoom.value = "1";
         AvatarCropImageElement.src = AvatarCropObjectUrl;
-        AvatarCropModal.hidden = false;
 
         UpdateAvatarCropPosition();
     };
 
-    Image.onerror = () => {
+    AvatarImage.onerror = () => {
         ProfileMessage.textContent = "This Image Could Not Be Opened.";
         CloseAvatarCrop();
     };
 
-    Image.src = AvatarCropObjectUrl;
+    AvatarImage.src = AvatarCropObjectUrl;
 }
 
 function CreateCroppedAvatar() {
