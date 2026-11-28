@@ -33,7 +33,8 @@ body {
 }
 
 button,
-input {
+input,
+textarea {
     font: inherit;
 }
 
@@ -41,8 +42,410 @@ button {
     cursor: pointer;
 }
 
+button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
 .Page {
     min-height: 100vh;
+}
+
+.ChatContainer {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100vh;
+    min-height: 400px;
+    background: #000;
+}
+
+.ChatContainer[hidden] {
+    display: none;
+}
+
+.ChatHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 68px;
+    padding: 0 28px;
+    background: #080808;
+}
+
+.ChatBrand {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.ChatBrand h1 {
+    margin: 0;
+    font-size: 19px;
+    font-weight: 500;
+    letter-spacing: -0.5px;
+}
+
+.ChatBrand span {
+    color: #777;
+    font-size: 11px;
+}
+
+.ChatHeaderActions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.ChatHeaderActions button {
+    min-height: 34px;
+    padding: 0 13px;
+    border: 0;
+    background: #171717;
+    color: #d5d5d5;
+    font-size: 12px;
+    transition: background 150ms ease;
+}
+
+.ChatHeaderActions button:hover {
+    background: #242424;
+}
+
+.ChatMain {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    width: 100%;
+    max-width: 1000px;
+    min-height: 0;
+    margin: 0 auto;
+    padding: 0 24px;
+}
+
+.MessageList {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding: 24px 0;
+    scrollbar-width: thin;
+    scrollbar-color: #303030 transparent;
+}
+
+.MessageList::-webkit-scrollbar {
+    width: 6px;
+}
+
+.MessageList::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.MessageList::-webkit-scrollbar-thumb {
+    background: #303030;
+}
+
+.ChatStatus {
+    margin: auto;
+    padding: 20px;
+    color: #777;
+    font-size: 12px;
+    text-align: center;
+}
+
+.MessageItem {
+    display: flex;
+    gap: 12px;
+    padding: 12px 0;
+}
+
+.MessageAvatar {
+    position: relative;
+    flex: 0 0 38px;
+    width: 38px;
+    height: 38px;
+    overflow: hidden;
+    border-radius: 50%;
+    background: #191919;
+}
+
+.MessageAvatar img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.MessageAvatarFallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    color: #aaa;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.MessageBody {
+    flex: 1;
+    min-width: 0;
+}
+
+.MessageHeader {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    min-height: 20px;
+}
+
+.MessageAuthor {
+    color: #ededed;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.MessageUsername {
+    color: #777;
+    font-size: 11px;
+}
+
+.MessageTimestamp {
+    color: #666;
+    font-size: 10px;
+}
+
+.MessageEdited {
+    color: #777;
+    font-size: 10px;
+}
+
+.MessageContent {
+    margin-top: 5px;
+    color: #d1d1d1;
+    font-size: 13px;
+    line-height: 1.65;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+
+.MessageDeleted {
+    color: #777;
+    font-style: italic;
+}
+
+.MessageActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 7px;
+    opacity: 0;
+    transition: opacity 120ms ease;
+}
+
+.MessageItem:hover .MessageActions,
+.MessageItem:focus-within .MessageActions {
+    opacity: 1;
+}
+
+.MessageActions button {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #777;
+    font-size: 10px;
+}
+
+.MessageActions button:hover {
+    color: #ededed;
+}
+
+.MessageReply {
+    margin-bottom: 7px;
+    padding: 7px 10px;
+    border-left: 2px solid #555;
+    background: #0c0c0c;
+    cursor: pointer;
+}
+
+.MessageReply span {
+    display: block;
+    margin-bottom: 3px;
+    color: #888;
+    font-size: 10px;
+}
+
+.MessageReply p {
+    margin: 0;
+    overflow: hidden;
+    color: #aaa;
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.MessageAttachments {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 9px;
+}
+
+.MessageAttachmentImage {
+    display: block;
+    max-width: min(100%, 360px);
+    max-height: 360px;
+    object-fit: contain;
+    background: #101010;
+}
+
+.MessageAttachmentVideo {
+    display: block;
+    width: min(100%, 420px);
+    max-height: 360px;
+    background: #080808;
+}
+
+.MessageAttachmentFile {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 100%;
+    padding: 9px 12px;
+    background: #141414;
+    color: #ccc;
+    font-size: 11px;
+    overflow-wrap: anywhere;
+}
+
+.ChatComposer {
+    flex-shrink: 0;
+    padding: 12px 0 22px;
+}
+
+.ReplyPreview {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 9px;
+    padding: 10px 12px;
+    background: #111;
+}
+
+.ReplyPreviewContent {
+    min-width: 0;
+}
+
+.ReplyPreviewContent span {
+    color: #888;
+    font-size: 10px;
+}
+
+.ReplyPreviewContent p {
+    margin: 4px 0 0;
+    overflow: hidden;
+    color: #ccc;
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ReplyPreview > button {
+    flex-shrink: 0;
+    border: 0;
+    background: transparent;
+    color: #888;
+    font-size: 20px;
+}
+
+.AttachmentPreview {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 9px;
+}
+
+.AttachmentPreviewItem {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 220px;
+    padding: 8px 10px;
+    background: #141414;
+    color: #bbb;
+    font-size: 11px;
+}
+
+.AttachmentPreviewItem span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.AttachmentPreviewItem button {
+    border: 0;
+    background: transparent;
+    color: #888;
+    font-size: 16px;
+}
+
+.ComposerControls {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    padding: 10px;
+    background: #101010;
+}
+
+.AttachmentButton {
+    flex: 0 0 36px;
+    width: 36px;
+    height: 36px;
+    border: 0;
+    background: #1c1c1c;
+    color: #ddd;
+    font-size: 23px;
+    font-weight: 300;
+}
+
+.AttachmentButton:hover {
+    background: #292929;
+}
+
+.ComposerControls textarea {
+    flex: 1;
+    min-width: 0;
+    min-height: 36px;
+    max-height: 160px;
+    padding: 9px 2px;
+    resize: none;
+    border: 0;
+    outline: none;
+    background: transparent;
+    color: #ededed;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.ComposerControls textarea::placeholder {
+    color: #666;
+}
+
+.SendMessageButton {
+    flex: 0 0 64px;
+    height: 36px;
+    border: 0;
+    background: #ededed;
+    color: #000;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.SendMessageButton:hover {
+    background: #d2d2d2;
 }
 
 .AuthContainer {
@@ -208,6 +611,27 @@ button {
     color: #e18a8a;
     font-size: 12px;
     line-height: 1.5;
+}
+
+.ProfileModalHeader {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 15px;
+}
+
+.ProfileModalHeader > button {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #888;
+    font-size: 23px;
+}
+
+.ProfileModalHeader > button:hover {
+    color: #ededed;
 }
 
 .ProfileSection {
@@ -404,6 +828,43 @@ button {
 }
 
 @media (max-width: 600px) {
+    .ChatHeader {
+        min-height: 60px;
+        padding: 0 14px;
+    }
+
+    .ChatHeaderActions {
+        gap: 6px;
+    }
+
+    .ChatHeaderActions button {
+        min-height: 32px;
+        padding: 0 9px;
+        font-size: 10px;
+    }
+
+    .ChatMain {
+        padding: 0 14px;
+    }
+
+    .MessageList {
+        padding: 16px 0;
+    }
+
+    .MessageItem {
+        gap: 9px;
+    }
+
+    .MessageAvatar {
+        flex-basis: 34px;
+        width: 34px;
+        height: 34px;
+    }
+
+    .MessageActions {
+        opacity: 1;
+    }
+
     .AuthContainer {
         padding: 16px;
     }

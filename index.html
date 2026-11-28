@@ -15,6 +15,79 @@
 </head>
 <body>
     <main class="Page">
+
+        <section id="ChatContainer" class="ChatContainer" hidden>
+            <header class="ChatHeader">
+                <div class="ChatBrand">
+                    <h1>Aurora</h1>
+                    <span>Global Chat</span>
+                </div>
+
+                <div class="ChatHeaderActions">
+                    <button id="ProfileSettingsButton" type="button">
+                        Profile Settings
+                    </button>
+
+                    <button id="ChatSignOutButton" type="button">
+                        Sign Out
+                    </button>
+                </div>
+            </header>
+
+            <section class="ChatMain">
+                <div id="MessageList" class="MessageList" aria-live="polite">
+                    <p id="ChatStatus" class="ChatStatus">
+                        Loading Messages...
+                    </p>
+                </div>
+
+                <form id="ChatComposer" class="ChatComposer">
+                    <div id="ReplyPreview" class="ReplyPreview" hidden>
+                        <div class="ReplyPreviewContent">
+                            <span>Replying To</span>
+                            <p id="ReplyPreviewText"></p>
+                        </div>
+
+                        <button id="CancelReplyButton" type="button" aria-label="Cancel Reply">
+                            ×
+                        </button>
+                    </div>
+
+                    <div id="AttachmentPreview" class="AttachmentPreview" hidden></div>
+
+                    <div class="ComposerControls">
+                        <input
+                            id="AttachmentInput"
+                            type="file"
+                            accept="image/*,video/*"
+                            multiple
+                            hidden
+                        >
+
+                        <button
+                            id="AttachmentButton"
+                            class="AttachmentButton"
+                            type="button"
+                            aria-label="Attach Files"
+                        >
+                            +
+                        </button>
+
+                        <textarea
+                            id="MessageInput"
+                            placeholder="Message Aurora..."
+                            rows="1"
+                            maxlength="10000"
+                        ></textarea>
+
+                        <button id="SendMessageButton" class="SendMessageButton" type="submit">
+                            Send
+                        </button>
+                    </div>
+                </form>
+            </section>
+        </section>
+
         <section class="AuthContainer" hidden>
             <div class="AuthModal">
 
@@ -126,15 +199,21 @@
                 </div>
 
                 <div id="AuthenticatedView" class="AuthView" hidden>
-                    <div class="AuthHeading">
-                        <h1>Welcome To Aurora</h1>
-                        <p id="AuthenticatedMessage"></p>
+                    <div class="ProfileModalHeader">
+                        <div class="AuthHeading">
+                            <h1>Profile Settings</h1>
+                            <p id="AuthenticatedMessage"></p>
+                        </div>
+
+                        <button id="CloseProfileSettings" type="button" aria-label="Close Settings">
+                            ×
+                        </button>
                     </div>
 
                     <div class="ProfileSection">
                         <div class="ProfileHeading">
-                            <h2>Profile Settings</h2>
-                            <p>Customize Your Aurora Profile.</p>
+                            <h2>Customize Your Profile</h2>
+                            <p>Update Your Aurora Profile Information.</p>
                         </div>
 
                         <form id="ProfileForm" class="AuthForm">
